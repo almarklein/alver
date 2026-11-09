@@ -59,4 +59,5 @@ options:
 
 ## Using alver as a library
 
-The alver library has a few convenient functions to deal with version numbers. Experimental. TODO.
+* `get_detailed_version_of_lib(module) -> str | None`: get the git-enhanced version of a library.
+* `get_detailed_version(version: str, filename: str) -> str`: get the git-enhanced version of a module's version and filename.

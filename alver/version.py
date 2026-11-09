@@ -60,7 +60,7 @@ def get_detailed_version_of_lib(module) -> str | None:
     return version
 
 
-def get_detailed_version(version: str, filename: str):
+def get_detailed_version(version: str, filename: str) -> str:
     """Get a more detailed version string, based on the git tags and history."""
 
     # Get path to the library dir, assume that filename is the dir or a file directly in that dir
