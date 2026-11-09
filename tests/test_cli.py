@@ -127,7 +127,9 @@ def test_version_command_outside_git_repo(tmp_path, monkeypatch):
 # ===== bump
 
 
-def test_bump_creates_changelog_and_updates_version(tmp_path, monkeypatch, fake_gh, capsys):
+def test_bump_creates_changelog_and_updates_version(
+    tmp_path, monkeypatch, fake_gh, capsys
+):
     repo = make_repo(tmp_path)  # no CHANGELOG.md
     monkeypatch.chdir(repo)
     assert cli.main(["bump", "v0.2.0"]) == 0
@@ -191,7 +193,11 @@ def test_changelog_from_gh(repo, fake_gh):
     assert cli.main(["changelog-from-gh"]) == 0
     changelog = (repo / "CHANGELOG.md").read_text()
     # unreleased on top, then v0.2.0 (from gh), then v0.1.0 (body updated from gh)
-    assert changelog.index("## [unreleased]") < changelog.index("## [v0.2.0]") < changelog.index("## [v0.1.0]")
+    assert (
+        changelog.index("## [unreleased]")
+        < changelog.index("## [v0.2.0]")
+        < changelog.index("## [v0.1.0]")
+    )
     assert "* gh release b" in changelog
     assert "* gh release a" in changelog
     assert "* wip" in changelog

@@ -65,7 +65,13 @@ def test_norm_version(a, b, equal):
 
 @pytest.mark.parametrize(
     "name,expected",
-    [("v1.2.3", True), ("1.2.3", True), ("v0.10.0rc1", True), ("unreleased", False), ("pending", False)],
+    [
+        ("v1.2.3", True),
+        ("1.2.3", True),
+        ("v0.10.0rc1", True),
+        ("unreleased", False),
+        ("pending", False),
+    ],
 )
 def test_is_version_name(name, expected):
     assert is_version_name(name) is expected
@@ -110,7 +116,9 @@ def test_bump_new_version_removes_unreleased():
     assert "* gh notes" in section
     assert section.index("* wip") < section.index("* gh notes")
     # Newest version on top.
-    assert out.index("## [v0.3.0]") < out.index("## [v0.2.0]") < out.index("## [v0.1.0]")
+    assert (
+        out.index("## [v0.3.0]") < out.index("## [v0.2.0]") < out.index("## [v0.1.0]")
+    )
 
 
 def test_bump_pending_header_is_removed():
@@ -131,7 +139,9 @@ def test_bump_existing_section_reused_and_not_duplicated():
 
 def test_bump_older_version_goes_below_newer():
     out = bump_changelog(SAMPLE, "v0.1.5", "* notes", today=TODAY)
-    assert out.index("## [v0.2.0]") < out.index("## [v0.1.5]") < out.index("## [v0.1.0]")
+    assert (
+        out.index("## [v0.2.0]") < out.index("## [v0.1.5]") < out.index("## [v0.1.0]")
+    )
 
 
 def test_bump_into_empty_changelog():
@@ -164,7 +174,11 @@ def test_changelog_from_releases_creates_sorted_sections():
         {"tag": "v0.9.0", "date": "2026-02-01T10:00:00Z", "body": "* b"},
     ]
     out = changelog_from_releases("# Changelog\n\n", releases)
-    assert out.index("## [v0.10.0] - 01-03-2026") < out.index("## [v0.9.0] - 01-02-2026") < out.index("## [v0.1.0] - 01-01-2026")
+    assert (
+        out.index("## [v0.10.0] - 01-03-2026")
+        < out.index("## [v0.9.0] - 01-02-2026")
+        < out.index("## [v0.1.0] - 01-01-2026")
+    )
     assert "* c" in out
 
 
@@ -193,11 +207,17 @@ def test_changelog_from_releases_merges_existing():
     "existing_body,gh_body,expected",
     [
         ("* two", "* gh two", "* gh two"),  # gh text is larger
-        ("* a much longer handwritten note", "* gh", "* a much longer handwritten note"),  # changelog text is larger
+        (
+            "* a much longer handwritten note",
+            "* gh",
+            "* a much longer handwritten note",
+        ),  # changelog text is larger
         ("* two", "", "* two"),  # no gh notes
     ],
 )
-def test_changelog_from_releases_picks_larger_notes_text(existing_body, gh_body, expected):
+def test_changelog_from_releases_picks_larger_notes_text(
+    existing_body, gh_body, expected
+):
     text = SAMPLE.replace("* two", existing_body)
     releases = [{"tag": "v0.2.0", "date": "2026-09-15T10:00:00Z", "body": gh_body}]
     out = changelog_from_releases(text, releases)
