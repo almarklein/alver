@@ -110,6 +110,26 @@ def repo(tmp_path, monkeypatch):
     return r
 
 
+# ===== help / no command
+
+
+def test_no_command_prints_help(capsys):
+    assert cli.main([]) == 2
+    out = capsys.readouterr().out
+    assert "usage:" in out
+    for cmd in ("bump", "notes", "version", "changelog-from-gh", "changelog-to-gh"):
+        assert cmd in out
+
+
+def test_help_shows_multiline_description(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["-h"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    # RawDescriptionHelpFormatter keeps the docstring's newlines intact.
+    assert "\n* Run `simpleversion bump" in out
+
+
 # ===== version
 
 
@@ -173,17 +193,17 @@ def test_bump_falls_back_to_git_log_without_gh(tmp_path, monkeypatch, capsys):
     assert "* special change" in changelog
 
 
-# ===== extract
+# ===== notes
 
 
-def test_extract(repo, capsys):
-    assert cli.main(["extract", "v0.1.0"]) == 0
+def test_notes(repo, capsys):
+    assert cli.main(["notes", "v0.1.0"]) == 0
     assert capsys.readouterr().out.strip() == "* one"
 
 
-def test_extract_missing_version(repo):
+def test_notes_missing_version(repo):
     with pytest.raises(SystemExit):
-        cli.main(["extract", "v9.9.9"])
+        cli.main(["notes", "v9.9.9"])
 
 
 # ===== changelog-from-gh

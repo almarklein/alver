@@ -1,17 +1,9 @@
-"""Command-line interface for simpleversion.
+"""Commands to easily manage releases and changelog
 
-* ``simpleversion bump vX.Y.Z`` - bump the version in ``_version.py`` and add a
-  section with gh-generated release notes to ``CHANGELOG.md``.
-* ``simpleversion extract vX.Y.Z`` - print the release notes for a version from
-  ``CHANGELOG.md``.
-* ``simpleversion version`` - print the current project version from
-  ``_version.py``.
-* ``simpleversion changelog-from-gh`` - create/update CHANGELOG.md sections
-  from the GitHub releases of this repo.
-* ``simpleversion changelog-to-gh`` - update the release notes of all gh
-  releases that have a section in CHANGELOG.md.
-
-Both commands operate on the git repository that the command is run from.
+* Run `simpleversion bump vx.y.z`.
+* Edit the changelog as needed.
+* Commit and create a PR for this version bump.
+* When merged, push a tag to roll the release.
 """
 
 from __future__ import annotations
@@ -25,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import notes as changelog
+from . import changelog
 
 VERSION_RE = re.compile(r"v?\d+\.\d+\.\d+(?:[.\-][0-9A-Za-z]+)*$", re.IGNORECASE)
 VERSION_LINE_RE = re.compile(r"^(__version__\s*=\s*)(['\"])([^'\"]*)\2", re.MULTILINE)
@@ -57,10 +49,14 @@ SKIP_DIRS = {
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="simpleversion",
-        description="Bump the version in _version.py and maintain release "
-        "notes in CHANGELOG.md.",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser(
+        "version", help="Print the current project version from _version.py."
+    )
 
     p_bump = sub.add_parser(
         "bump",
@@ -69,14 +65,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_bump.add_argument("version", help="New version, e.g. v1.2.3")
 
-    p_extract = sub.add_parser(
-        "extract", help="Print the release notes for a version from CHANGELOG.md."
+    p_notes = sub.add_parser(
+        "notes", help="Print the release notes for a version from CHANGELOG.md."
     )
-    p_extract.add_argument("version", help="Version to extract, e.g. v1.2.3")
-
-    sub.add_parser(
-        "version", help="Print the current project version from _version.py."
-    )
+    p_notes.add_argument("version", help="Version to show notes for, e.g. v1.2.3")
 
     sub.add_parser(
         "changelog-from-gh",
@@ -91,10 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 2
     if args.command == "bump":
         return cmd_bump(args.version)
-    elif args.command == "extract":
-        return cmd_extract(args.version)
+    elif args.command == "notes":
+        return cmd_notes(args.version)
     elif args.command == "version":
         return cmd_version()
     elif args.command == "changelog-from-gh":
@@ -212,7 +207,7 @@ def cmd_bump(version: str) -> int:
     return 0
 
 
-def cmd_extract(version: str) -> int:
+def cmd_notes(version: str) -> int:
     repo_dir = get_repo_dir()
     changelog_file = get_changelog_file(repo_dir)
     try:
