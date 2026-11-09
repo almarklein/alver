@@ -21,6 +21,9 @@ from . import changelog
 
 VERSION_RE = re.compile(r"v?\d+\.\d+\.\d+(?:[.\-][0-9A-Za-z]+)*$", re.IGNORECASE)
 VERSION_LINE_RE = re.compile(r"^(__version__\s*=\s*)(['\"])([^'\"]*)\2", re.MULTILINE)
+# Matches the ``version = "..."`` line in the [project] table of a pyproject.toml.
+PYPROJECT_VERSION_LINE_RE = re.compile(r"^version\s*=\s*(['\"])([^'\"]*)\1")
+PROJECT_TABLE_RE = re.compile(r"\s*\[project\]\s*(#.*)?$")
 GITHUB_REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
@@ -55,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser(
-        "version", help="Print the current project version from _version.py."
+        "version",
+        help="Print the current project version (from _version.py, __init__.py, "
+        "or pyproject.toml).",
     )
 
     p_bump = sub.add_parser(
@@ -162,7 +167,16 @@ def cmd_version() -> int:
 
 
 def load_version(path: Path) -> str:
-    """Load a _version.py as a module and return its __version__ attribute."""
+    """Return the version defined in the given version file.
+
+    Supports _version.py and __init__.py (a __version__ assignment) as well as
+    pyproject.toml (a static version in the [project] table).
+    """
+    if path.name == "pyproject.toml":
+        span = _project_version_span(path.read_text(encoding="utf-8"))
+        if span:
+            return span[2]
+        sys.exit(f"error: could not determine version from [project] in {path}")
     try:
         spec = importlib.util.spec_from_file_location("_version", path)
         mod = importlib.util.module_from_spec(spec)
@@ -264,24 +278,75 @@ def get_changelog_file(repo_dir: Path, create: bool = False) -> Path:
     return path
 
 
+def _read_text_safe(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _project_version_span(text: str) -> tuple[int, int, str] | None:
+    """Locate the ``version = "..."`` value in the [project] table of a pyproject.toml.
+
+    Returns (start, end, version) character offsets of the version value in
+    ``text``, or None if the [project] table has no static version line.
+    """
+    in_project = False
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("["):
+            in_project = bool(PROJECT_TABLE_RE.fullmatch(line))
+        elif in_project:
+            m = PYPROJECT_VERSION_LINE_RE.match(line)
+            if m:
+                start = offset + m.start(2)
+                return start, start + len(m.group(2)), m.group(2)
+        offset += len(line)
+    return None
+
+
 def find_version_file(repo_dir: Path) -> Path:
-    """Find the _version.py in the repo (shallowest match wins)."""
-    matches = []
+    """Find the file that defines the project version (shallowest match wins).
+
+    Recognized version files: ``_version.py``, an ``__init__.py`` with a
+    ``__version__`` assignment, and a ``pyproject.toml`` with a static
+    ``version`` in its ``[project]`` table.
+    """
+    matches: list[tuple[Path, int]] = []
     for dirpath, dirnames, filenames in os.walk(repo_dir):
         dirnames[:] = [
             d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
         ]
+        p = Path(dirpath)
         if "_version.py" in filenames:
-            matches.append(Path(dirpath) / "_version.py")
+            matches.append((p / "_version.py", 0))
+        if "__init__.py" in filenames:
+            init_file = p / "__init__.py"
+            if VERSION_LINE_RE.search(_read_text_safe(init_file)):
+                matches.append((init_file, 1))
+        if "pyproject.toml" in filenames:
+            pyproject = p / "pyproject.toml"
+            if _project_version_span(_read_text_safe(pyproject)):
+                matches.append((pyproject, 2))
     if not matches:
-        sys.exit(f"error: no _version.py found in {repo_dir}")
-    matches.sort(key=lambda p: (len(p.parts), str(p)))
-    return matches[0]
+        sys.exit(
+            f"error: no version file found in {repo_dir} (looked for _version.py, "
+            "__init__.py with __version__, and pyproject.toml with [project] version)"
+        )
+    matches.sort(key=lambda t: (len(t[0].parts), t[1], str(t[0])))
+    return matches[0][0]
 
 
 def set_version_in_file(path: Path, version: str) -> str:
-    """Set __version__ in the given _version.py. Returns the old version."""
+    """Set the version in the given version file. Returns the old version."""
     text = path.read_text(encoding="utf-8")
+    if path.name == "pyproject.toml":
+        span = _project_version_span(text)
+        if not span:
+            sys.exit(f"error: no version assignment found in [project] of {path}")
+        start, end, old = span
+        path.write_text(text[:start] + version + text[end:], encoding="utf-8")
+        return old
     m = VERSION_LINE_RE.search(text)
     if not m:
         sys.exit(f"error: no __version__ assignment found in {path}")

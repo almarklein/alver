@@ -3,7 +3,7 @@
 [project]
 dynamic = ["version"]
 name = "alver"
-description = "Version management made easy"
+description = "Easy management of versions, releases and changelog."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Almar Klein" }]
