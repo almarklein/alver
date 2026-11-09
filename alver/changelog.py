@@ -13,8 +13,13 @@ from datetime import date, datetime
 
 from .version import get_version_tuple
 
-# Matches a section header line, e.g. "## [v1.2.3] - 23-06-2026" or "## [unreleased]"
-HEADER_RE = re.compile(r"^##\s*\[([^\]]*)\]\s*(?:-\s*(.*?))?\s*$", re.MULTILINE)
+# Matches a section header line, e.g. "## [v1.2.3] - 23-06-2026" or "## [unreleased]".
+# Sections may be written with one to three hashes ("# [...]", "## [...]",
+# "### [...]"); they are always written back with "## ".
+HEADER_RE = re.compile(r"^#{1,3}\s*\[([^\]]*)\]\s*(?:-\s*(.*?))?\s*$", re.MULTILINE)
+
+# Matches a markdown sub-header line inside a section body ("# Foo" or "## Foo").
+SUBHEADER_RE = re.compile(r"^#{1,2} (.*)$", re.MULTILINE)
 
 # Matches a section name that is a version, e.g. "v1.2.3" or "1.2.3rc1"
 VERSION_NAME_RE = re.compile(r"v?\d+(\.\d+)*[0-9A-Za-z.\-+]*", re.IGNORECASE)
@@ -100,25 +105,43 @@ def parse_changelog(text: str) -> tuple[str, list[Section]]:
     return preamble, sections
 
 
+def _normalize_body(body: str) -> str:
+    """Normalize a section body: at most one blank line (two successive
+    newlines) between lines, and sub-headers written as "# " or "## " are
+    rewritten as "### "."""
+    text = re.sub(r"\n{3,}", "\n\n", body.strip("\n"))
+    return SUBHEADER_RE.sub(r"### \1", text)
+
+
 def render_changelog(preamble: str, sections: list[Section]) -> str:
-    """Compose changelog text from a preamble and sections."""
-    out = preamble
-    if out and not out.endswith("\n"):
-        out += "\n"
+    """Compose changelog text from a preamble and sections, in canonical format.
+
+    Section headers are always written as ``## [name]`` (regardless of how they
+    were written), sections are separated by exactly two blank lines, within a
+    section there is at most one blank line, and sub-headers inside a section
+    are written as ``### ``.
+    """
     blocks = []
     for s in sections:
         header = f"## [{s.name}]"
         if s.date:
             header += f" - {s.date}"
-        body = s.body.strip("\n")
-        # End a non-empty body with a newline so the next header is
-        # separated by a blank line; keep empty bodies compact.
-        blocks.append(header + "\n\n" + body + ("\n" if body else ""))
-    if blocks:
-        out += "\n".join(blocks)
-    if out.strip():
-        out = out.rstrip("\n") + "\n"
-    return out
+        body = _normalize_body(s.body)
+        blocks.append(header + "\n\n" + body if body else header)
+    parts = []
+    if preamble.strip():
+        parts.append(preamble.rstrip("\n"))
+    parts.extend(blocks)
+    if not parts:
+        return ""
+    return "\n\n\n".join(parts) + "\n"
+
+
+def format_changelog(text: str) -> str:
+    """Format changelog text into the canonical format (see ``render_changelog``),
+    preserving the order of the sections."""
+    preamble, sections = parse_changelog(text)
+    return render_changelog(preamble, sections)
 
 
 def bump_changelog(
