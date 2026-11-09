@@ -1,9 +1,9 @@
-"""Commands to easily manage releases and changelog
+"""Easy management of versions, releases and changelog
 
-* Run `alver bump vx.y.z`.
-* Edit the changelog as needed.
-* Commit and create a PR for this version bump.
-* When merged, push a tag to roll the release.
+* Run `alver bump vx.y.z`
+* Edit CHANGELOG.md as needed.
+* Create a PR, discuss, merge.
+* -> Github does the rest (publish release to Pypi and GH).
 """
 
 from __future__ import annotations
