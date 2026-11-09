@@ -283,7 +283,8 @@ def test_notes_missing_version(repo):
 
 
 def test_changelog_from_gh(repo, fake_gh):
-    assert cli.main(["changelog-from-gh"]) == 0
+    # Explicit '*' processes all releases (the old default behavior).
+    assert cli.main(["changelog-from-gh", "*"]) == 0
     changelog = (repo / "CHANGELOG.md").read_text()
     # unreleased on top, then v0.2.0 (from gh), then v0.1.0 (body updated from gh)
     assert (
@@ -296,10 +297,42 @@ def test_changelog_from_gh(repo, fake_gh):
     assert "* wip" in changelog
 
 
+def test_changelog_from_gh_single_version(repo, fake_gh):
+    assert cli.main(["changelog-from-gh", "v0.2.0"]) == 0
+    changelog = (repo / "CHANGELOG.md").read_text()
+    assert "## [v0.2.0]" in changelog
+    assert "* gh release b" in changelog
+    # The v0.1.0 release was not processed: its hand-written body is kept.
+    v010_section = changelog.split("## [v0.1.0]")[1]
+    assert "* one" in v010_section
+    assert "* gh release a" not in changelog
+
+
+def test_changelog_from_gh_version_without_v_prefix(repo, fake_gh):
+    # "0.2.0" matches the gh release tagged "v0.2.0".
+    assert cli.main(["changelog-from-gh", "0.2.0"]) == 0
+    changelog = (repo / "CHANGELOG.md").read_text()
+    assert "* gh release b" in changelog
+    assert "* gh release a" not in changelog
+
+
+def test_changelog_from_gh_partial_wildcard(repo, fake_gh):
+    assert cli.main(["changelog-from-gh", "v0.2.*"]) == 0
+    changelog = (repo / "CHANGELOG.md").read_text()
+    assert "* gh release b" in changelog
+    assert "* gh release a" not in changelog
+
+
+def test_changelog_from_gh_unknown_version_changes_nothing(repo, fake_gh):
+    before = (repo / "CHANGELOG.md").read_text()
+    assert cli.main(["changelog-from-gh", "v9.9.9"]) == 0
+    assert (repo / "CHANGELOG.md").read_text() == before
+
+
 def test_changelog_from_gh_creates_file(tmp_path, monkeypatch, fake_gh):
     repo = make_repo(tmp_path)  # no CHANGELOG.md
     monkeypatch.chdir(repo)
-    assert cli.main(["changelog-from-gh"]) == 0
+    assert cli.main(["changelog-from-gh", "*"]) == 0
     assert (repo / "CHANGELOG.md").is_file()
 
 
@@ -313,7 +346,7 @@ def test_changelog_from_gh_without_gh_executable(repo, monkeypatch):
 
     monkeypatch.setattr(cli.subprocess, "run", no_gh)
     with pytest.raises(SystemExit):
-        cli.main(["changelog-from-gh"])
+        cli.main(["changelog-from-gh", "*"])
 
 
 # ===== changelog-to-gh
@@ -331,7 +364,8 @@ def test_changelog_to_gh(tmp_path, monkeypatch, install_fake_gh, capsys):
     )
     repo = make_repo(tmp_path, changelog=changelog)
     monkeypatch.chdir(repo)
-    assert cli.main(["changelog-to-gh"]) == 0
+    # Explicit '*' processes all sections (the old default behavior).
+    assert cli.main(["changelog-to-gh", "*"]) == 0
     calls = log.read_text()
     # Section [v0.2.0] matches the release tagged "0.2.0"; the larger text
     # ("v0.2.0") is picked as the tag for the PATCH.
@@ -346,11 +380,83 @@ def test_changelog_to_gh(tmp_path, monkeypatch, install_fake_gh, capsys):
     assert "Skipped [v0.5.0]" in out
 
 
+def test_changelog_to_gh_single_version(tmp_path, monkeypatch, install_fake_gh, capsys):
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    install_fake_gh(FAKE_GH_PATCH)
+    changelog = (
+        "# Changelog\n\n"
+        "## [v0.2.0] - 01-09-2026\n\n* two notes\n\n"
+        "## [v0.5.0] - 01-10-2026\n\n* no release for this\n"
+    )
+    repo = make_repo(tmp_path, changelog=changelog)
+    monkeypatch.chdir(repo)
+    assert cli.main(["changelog-to-gh", "v0.2.0"]) == 0
+    calls = log.read_text()
+    assert "releases/tags/v0.2.0" in calls
+    out = capsys.readouterr().out
+    assert "Updated release v0.2.0" in out
+    # [v0.5.0] is filtered out by the version argument, not even reported.
+    assert "v0.5.0" not in out
+
+
+def test_changelog_to_gh_version_without_matching_release(
+    tmp_path, monkeypatch, install_fake_gh, capsys
+):
+    log = tmp_path / "gh.log"
+    monkeypatch.setenv("FAKE_GH_LOG", str(log))
+    install_fake_gh(FAKE_GH_PATCH)
+    changelog = (
+        "# Changelog\n\n"
+        "## [v0.2.0] - 01-09-2026\n\n* two notes\n\n"
+        "## [v0.5.0] - 01-10-2026\n\n* no release for this\n"
+    )
+    repo = make_repo(tmp_path, changelog=changelog)
+    monkeypatch.chdir(repo)
+    assert cli.main(["changelog-to-gh", "v0.5.0"]) == 0
+    # No PATCH calls were made.
+    assert not log.exists() or log.read_text() == ""
+    out = capsys.readouterr().out
+    assert "Updated release" not in out
+    assert "Skipped [v0.5.0]" in out
+    # [v0.2.0] was filtered out by the version argument.
+    assert "v0.2.0" not in out
+
+
 def test_changelog_to_gh_requires_changelog(tmp_path, monkeypatch, fake_gh):
     repo = make_repo(tmp_path)  # no CHANGELOG.md
     monkeypatch.chdir(repo)
     with pytest.raises(SystemExit):
-        cli.main(["changelog-to-gh"])
+        cli.main(["changelog-to-gh", "*"])
+
+
+# ===== required version argument / help usage
+
+
+@pytest.mark.parametrize("cmd", ["changelog-from-gh", "changelog-to-gh"])
+def test_changelog_commands_require_version(cmd, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([cmd])
+    assert exc.value.code == 2  # argparse error: missing required argument
+    assert "version" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "cmd,usage",
+    [
+        ("bump", "usage: alver bump [-h] version"),
+        ("notes", "usage: alver notes [-h] version"),
+        ("changelog-from-gh", "usage: alver changelog-from-gh [-h] version"),
+        ("changelog-to-gh", "usage: alver changelog-to-gh [-h] version"),
+    ],
+)
+def test_command_help_specifies_version_argument(cmd, usage, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([cmd, "-h"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert usage in out
+    assert "[version]" not in out.splitlines()[0]  # required, not optional
 
 
 # ===== helpers

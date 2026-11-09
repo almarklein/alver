@@ -30,20 +30,29 @@ Commands to easily manage releases and changelog
 
 positional arguments:
   {version,bump,notes,changelog-from-gh,changelog-to-gh}
-    version             Print the current project version from _version.py.
-    bump                Bump the version and add a changelog section with gh-generated release notes.
-    notes               Print the release notes for a version from CHANGELOG.md.
-    changelog-from-gh   Create/update CHANGELOG.md sections from the GitHub releases of this repo.
-    changelog-to-gh     Update the release notes of all gh releases that have a section in CHANGELOG.md.
+    version             Print the current project version (from _version.py, __init__.py, or pyproject.toml).
+    bump                Bump to the given version and add a changelog section with gh-generated release notes, e.g. `alver bump v1.2.3`.
+    notes               Print the release notes for the given version from CHANGELOG.md, e.g. `alver notes v1.2.3`.
+    changelog-from-gh   Create/update CHANGELOG.md sections from the GitHub releases of this repo for the given version, e.g. `alver changelog-from-gh v1.2.3` ('*' = all releases).
+    changelog-to-gh     Update the gh release notes from the CHANGELOG.md section of the given version, e.g. `alver changelog-to-gh v1.2.3` ('*' = all sections).
 
 options:
   -h, --help            show this help message and exit
 ```
 
 
-## Adopting the alver GH workflow
+## Adopting the alver flow in your project
 
-Should be really easy:
+Install alver:
+
+* `pip install alver` or use your favorite installer.
+
+Meet the assumptions made by alver:
+
+* Your version is defined in `pyproject.toml`, `__init__.py`, or `_version.py`.
+* You have a CHANGELOG.md with headers marked as `## [v1.0.0] - 09-11-2026`. If no changelog exists, alver will create it. 
+
+To setup Github actions:
 
 * Copy [release.yml](.github/workflows/release.yml) into your project.
 * Create a `build.yml` that does the build and published the artifacts to `dist`.
