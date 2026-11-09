@@ -47,7 +47,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install alver
-        run: pip install .
+        run: |
+          # This workflow is copied verbatim into other projects. When running
+          # in the alver repo itself (or a fork), use that (this is a test by itself);
+          # otherwise install alver from PyPI.
+          if [ -f alver/__init__.py ]; then
+            pip install .
+          else
+            pip install alver
+          fi
 
       - name: Create and push version tag
         run: |
