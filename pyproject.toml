@@ -1,0 +1,42 @@
+# ===== Project info
+
+[project]
+dynamic = ["version"]
+name = "simpleversion"
+description = "Version management made easy"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Almar Klein" }]
+keywords = [
+    "versioning",
+    "releaseing"
+]
+requires-python = ">= 3.10"
+dependencies = [] 
+
+[project.optional-dependencies]
+dev = ["ruff", "pre-commit", "pytest"]
+
+[project.scripts]
+simpleversion = "simpleversion.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/pygfx/simpleversion"
+Repository = "https://github.com/pygfx/simpleversion"
+
+# ===== Building
+
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+# ===== Tooling
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "N", "B", "RUF"]
+ignore = [
+    "E501",   # Line too long
+]
