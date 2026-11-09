@@ -13,9 +13,11 @@ CHANGELOG = """# Changelog
 
 Preamble.
 
+
 ## [unreleased]
 
 * wip
+
 
 ## [v0.1.0] - 01-01-2026
 
@@ -144,6 +146,7 @@ def test_no_command_prints_help(capsys):
         "notes",
         "version",
         "gitversion",
+        "format",
         "changelog-from-gh",
         "changelog-to-gh",
     ):
@@ -405,6 +408,35 @@ def test_changelog_from_gh_without_gh_executable(repo, monkeypatch):
     monkeypatch.setattr(cli.subprocess, "run", no_gh)
     with pytest.raises(SystemExit):
         cli.main(["changelog-from-gh", "*"])
+
+
+# ===== format
+
+
+MESSY_CHANGELOG = (
+    "# Changelog\n\n\n## [unreleased]\n\n\n* wip\n\n\n"
+    "### [v0.1.0] - 01-01-2026\n\n* one\n\n## Sub\n"
+)
+
+
+def test_format_command(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path, changelog=MESSY_CHANGELOG)
+    monkeypatch.chdir(repo)
+    assert cli.main(["format"]) == 0
+    out = (repo / "CHANGELOG.md").read_text()
+    assert out == (
+        "# Changelog\n\n\n"
+        "## [unreleased]\n\n* wip\n\n\n"
+        "## [v0.1.0] - 01-01-2026\n\n* one\n\n### Sub\n"
+    )
+    assert "Formatted CHANGELOG.md" in capsys.readouterr().out
+
+
+def test_format_command_requires_changelog(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path)  # no CHANGELOG.md
+    monkeypatch.chdir(repo)
+    with pytest.raises(SystemExit):
+        cli.main(["format"])
 
 
 # ===== changelog-to-gh

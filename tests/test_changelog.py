@@ -6,6 +6,7 @@ from alver.changelog import (
     bump_changelog,
     changelog_from_releases,
     extract_changelog,
+    format_changelog,
     iso_to_changelog_date,
     is_version_name,
     norm_version,
@@ -18,13 +19,16 @@ SAMPLE = """# Changelog
 
 Preamble.
 
+
 ## [unreleased]
 
 * wip
 
+
 ## [v0.2.0] - 01-02-2026
 
 * two
+
 
 ## [v0.1.0] - 01-01-2026
 
@@ -237,3 +241,84 @@ def test_changelog_from_releases_picks_larger_version_text(section_name, tag, ex
     releases = [{"tag": tag, "date": "2026-09-15T10:00:00Z", "body": "* gh"}]
     out = changelog_from_releases(text, releases)
     assert f"## [{expected}]" in out
+
+
+# ===== format / canonical rendering
+
+
+MESSY = """# Changelog
+
+Preamble.
+
+
+
+# [unreleased]
+
+
+* wip
+
+
+* more wip
+
+### [v0.1.0] - 01-01-2026
+
+
+
+* one
+
+## Sub-header
+
+# Another header
+"""
+
+CANONICAL = """# Changelog
+
+Preamble.
+
+
+## [unreleased]
+
+* wip
+
+* more wip
+
+
+## [v0.1.0] - 01-01-2026
+
+* one
+
+### Sub-header
+
+### Another header
+"""
+
+
+def test_parse_detects_hash_variants():
+    preamble, sections = parse_changelog(MESSY)
+    assert preamble.startswith("# Changelog")
+    assert [s.name for s in sections] == ["unreleased", "v0.1.0"]
+    assert sections[1].date == "01-01-2026"
+
+
+def test_format_changelog_normalizes():
+    assert format_changelog(MESSY) == CANONICAL
+
+
+def test_format_changelog_preserves_section_order():
+    # format does not sort; it only normalizes.
+    text = "## [v0.1.0]\n\n* one\n\n\n\n## [v0.2.0]\n\n* two\n"
+    assert format_changelog(text) == "## [v0.1.0]\n\n* one\n\n\n## [v0.2.0]\n\n* two\n"
+
+
+def test_render_empty_section_two_blank_line_gap():
+    out = render_changelog("", [Section("v0.2.0"), Section("v0.1.0", body="* one")])
+    assert out == "## [v0.2.0]\n\n\n## [v0.1.0]\n\n* one\n"
+
+
+def test_render_collapses_excess_blank_lines_within_section():
+    out = render_changelog("", [Section("v0.1.0", body="* a\n\n\n\n* b")])
+    assert out == "## [v0.1.0]\n\n* a\n\n* b\n"
+
+
+def test_format_changelog_empty():
+    assert format_changelog("") == ""

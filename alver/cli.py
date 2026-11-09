@@ -71,6 +71,11 @@ def main(argv: list[str] | None = None) -> int:
         "(like 'version', but refined), e.g. 1.2.3.post4+gabcdef1.",
     )
 
+    sub.add_parser(
+        "format",
+        help="Format CHANGELOG.md in place, fixes section headers and blanc lines.",
+    )
+
     p_bump = sub.add_parser(
         "bump",
         help="Bump to the given version and add a changelog section with "
@@ -120,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_version()
     elif args.command == "gitversion":
         return cmd_gitversion()
+    elif args.command == "format":
+        return cmd_format()
     elif args.command == "changelog-from-gh":
         return cmd_changelog_from_gh(args.version)
     elif args.command == "changelog-to-gh":
@@ -210,6 +217,16 @@ def cmd_gitversion() -> int:
     version_file = find_version_file(repo_dir)
     version = load_version(version_file)
     print(get_detailed_version(version, str(version_file)))
+    return 0
+
+
+def cmd_format() -> int:
+    repo_dir = get_repo_dir()
+    changelog_file = get_changelog_file(repo_dir)  # must exist
+    text = changelog_file.read_text(encoding="utf-8")
+    new_text = changelog.format_changelog(text)
+    changelog_file.write_text(new_text, encoding="utf-8")
+    print(f"Formatted {changelog_file.relative_to(repo_dir)}")
     return 0
 
 
