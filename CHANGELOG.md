@@ -12,28 +12,41 @@ Possible sections in each release:
 * Fixed: for any bug fixes.
 * Security: in case of vulnerabilities.
 
+
+## [v1.2.0](https://github.com/almarklein/alver/releases/tag/v1.2.0) - 10-11-2026
+
+### What's Changed
+* Better formatting, and new format cmd by @almarklein in https://github.com/almarklein/alver/pull/13
+* Add support for links in release header by @almarklein in https://github.com/almarklein/alver/pull/14
+* Avoid detecting comments as headers by @almarklein in https://github.com/almarklein/alver/pull/15
+* Fix that links should only be added to new entries by @almarklein in https://github.com/almarklein/alver/pull/16
+* Fix release workflow when copied in other projects by @almarklein in https://github.com/almarklein/alver/pull/17
+
+**Full Changelog**: https://github.com/almarklein/alver/compare/v1.1.0...v1.2.0
+
+
 ## [1.1.0] - 09-11-2026
 
-## What's Changed
+### What's Changed
 * Also support version definition in other sources by @almarklein in https://github.com/almarklein/alver/pull/6
 * The changelog-from-gh and changelog-to-gh commands now have a forced version arg by @almarklein in https://github.com/almarklein/alver/pull/7
 * Tweak docs by @almarklein in https://github.com/almarklein/alver/pull/8
 * Add gitversion by @almarklein in https://github.com/almarklein/alver/pull/9
 
-
 **Full Changelog**: https://github.com/almarklein/alver/compare/v1.0.0...1.1.0
+
 
 ## [v1.0.0] - 09-11-2026
 
 First release!
 
-## What's Changed
+### What's Changed
 * Add CI by @almarklein in https://github.com/almarklein/alver/pull/1
 * Docs in readme by @almarklein in https://github.com/almarklein/alver/pull/2
 * Add release.yml by @almarklein in https://github.com/almarklein/alver/pull/3
 * Rename by @almarklein in https://github.com/almarklein/alver/pull/4
 
-## New Contributors
+### New Contributors
 * @almarklein made their first contribution in https://github.com/almarklein/alver/pull/1
 
 **Full Changelog**: https://github.com/almarklein/alver/commits/v1.0.0
