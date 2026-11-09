@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from .detail import get_version_tuple
+from .version import get_version_tuple
 
 # Matches a section header line, e.g. "## [v1.2.3] - 23-06-2026" or "## [unreleased]"
 HEADER_RE = re.compile(r"^##\s*\[([^\]]*)\]\s*(?:-\s*(.*?))?\s*$", re.MULTILINE)

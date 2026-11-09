@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from . import changelog
+from .version import get_detailed_version
 
 VERSION_RE = re.compile(r"v?\d+\.\d+\.\d+(?:[.\-][0-9A-Za-z]+)*$", re.IGNORECASE)
 VERSION_LINE_RE = re.compile(r"^(__version__\s*=\s*)(['\"])([^'\"]*)\2", re.MULTILINE)
@@ -29,7 +30,7 @@ GITHUB_REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
 
-# Directories to skip when searching the repo for _version.py.
+# Directories to skip when searching the repo for the version file.
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -62,6 +63,12 @@ def main(argv: list[str] | None = None) -> int:
         "version",
         help="Print the current project version (from _version.py, __init__.py, "
         "or pyproject.toml).",
+    )
+
+    sub.add_parser(
+        "gitversion",
+        help="Print the detailed project version based on git tags and history "
+        "(like 'version', but refined), e.g. 1.2.3.post4+gabcdef1.",
     )
 
     p_bump = sub.add_parser(
@@ -111,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_notes(args.version)
     elif args.command == "version":
         return cmd_version()
+    elif args.command == "gitversion":
+        return cmd_gitversion()
     elif args.command == "changelog-from-gh":
         return cmd_changelog_from_gh(args.version)
     elif args.command == "changelog-to-gh":
@@ -193,6 +202,14 @@ def cmd_version() -> int:
     repo_dir = get_repo_dir()
     version_file = find_version_file(repo_dir)
     print(load_version(version_file))
+    return 0
+
+
+def cmd_gitversion() -> int:
+    repo_dir = get_repo_dir()
+    version_file = find_version_file(repo_dir)
+    version = load_version(version_file)
+    print(get_detailed_version(version, str(version_file)))
     return 0
 
 
