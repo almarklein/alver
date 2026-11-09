@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import importlib.util
 import json
 import os
@@ -65,26 +66,39 @@ def main(argv: list[str] | None = None) -> int:
 
     p_bump = sub.add_parser(
         "bump",
-        help="Bump the version and add a changelog section with "
-        "gh-generated release notes.",
+        help="Bump to the given version and add a changelog section with "
+        "gh-generated release notes, e.g. `alver bump v1.2.3`.",
     )
-    p_bump.add_argument("version", help="New version, e.g. v1.2.3")
+    p_bump.add_argument("version", help="New version to bump to, e.g. v1.2.3")
 
     p_notes = sub.add_parser(
-        "notes", help="Print the release notes for a version from CHANGELOG.md."
+        "notes",
+        help="Print the release notes for the given version from CHANGELOG.md, "
+        "e.g. `alver notes v1.2.3`.",
     )
     p_notes.add_argument("version", help="Version to show notes for, e.g. v1.2.3")
 
-    sub.add_parser(
+    p_from_gh = sub.add_parser(
         "changelog-from-gh",
-        help="Create/update CHANGELOG.md sections from the GitHub releases "
-        "of this repo.",
+        help="Create/update CHANGELOG.md sections from the GitHub releases of "
+        "this repo for the given version, e.g. `alver changelog-from-gh v1.2.3` "
+        "('*' = all releases).",
+    )
+    p_from_gh.add_argument(
+        "version",
+        help="Release version to process, e.g. v1.2.3 or v0.2.*; '*' processes "
+        "all releases.",
     )
 
-    sub.add_parser(
+    p_to_gh = sub.add_parser(
         "changelog-to-gh",
-        help="Update the release notes of all gh releases that have a "
-        "section in CHANGELOG.md.",
+        help="Update the gh release notes from the CHANGELOG.md section of the "
+        "given version, e.g. `alver changelog-to-gh v1.2.3` ('*' = all sections).",
+    )
+    p_to_gh.add_argument(
+        "version",
+        help="Version whose section/release to process, e.g. v1.2.3 or v0.2.*; "
+        "'*' processes all sections.",
     )
 
     args = parser.parse_args(argv)
@@ -98,13 +112,24 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "version":
         return cmd_version()
     elif args.command == "changelog-from-gh":
-        return cmd_changelog_from_gh()
+        return cmd_changelog_from_gh(args.version)
     elif args.command == "changelog-to-gh":
-        return cmd_changelog_to_gh()
+        return cmd_changelog_to_gh(args.version)
     return 2  # pragma: no cover
 
 
-def cmd_changelog_to_gh() -> int:
+def version_matches(pattern: str, name: str) -> bool:
+    """Whether a version/tag matches a pattern; '*' matches everything.
+
+    Comparison is on normalized versions, so 'v1.2.3' matches '1.2.3', and
+    wildcards work, e.g. 'v0.2.*'.
+    """
+    return fnmatch.fnmatchcase(
+        changelog.norm_version(name), changelog.norm_version(pattern)
+    )
+
+
+def cmd_changelog_to_gh(version: str) -> int:
     repo_dir = get_repo_dir()
     changelog_file = get_changelog_file(
         repo_dir
@@ -122,6 +147,8 @@ def cmd_changelog_to_gh() -> int:
     for s in sections:
         if not changelog.is_version_name(s.name):
             continue  # e.g. [unreleased]
+        if not version_matches(version, s.name):
+            continue  # filtered out by the version argument
         rel = by_version.get(changelog.norm_version(s.name))
         if rel is None:
             skipped.append(s.name)
@@ -143,11 +170,14 @@ def cmd_changelog_to_gh() -> int:
     return 0
 
 
-def cmd_changelog_from_gh() -> int:
+def cmd_changelog_from_gh(version: str) -> int:
     repo_dir = get_repo_dir()
     changelog_file = get_changelog_file(repo_dir, create=True)
     owner, repo = get_owner_repo(repo_dir)
     releases = get_gh_releases(owner, repo, repo_dir)
+    releases = [
+        r for r in releases if version_matches(version, str(r.get("tag") or ""))
+    ]
     new_text = changelog.changelog_from_releases(
         changelog_file.read_text(encoding="utf-8"), releases
     )
