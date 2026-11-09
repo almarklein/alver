@@ -252,7 +252,7 @@ Preamble.
 
 
 
-# [unreleased]
+### [unreleased]
 
 
 * wip
@@ -289,7 +289,7 @@ Preamble.
 
 ### Sub-header
 
-### Another header
+# Another header
 """
 
 
@@ -298,6 +298,27 @@ def test_parse_detects_hash_variants():
     assert preamble.startswith("# Changelog")
     assert [s.name for s in sections] == ["unreleased", "v0.1.0"]
     assert sections[1].date == "01-01-2026"
+
+
+def test_single_hash_bracket_line_is_not_a_section():
+    # A line starting with a single "#" is not a section header (it is usually
+    # a comment, e.g. inside a code block).
+    text = "# Changelog\n\n# [not a section]\n\n## [v0.1.0]\n\n* one\n"
+    preamble, sections = parse_changelog(text)
+    assert [s.name for s in sections] == ["v0.1.0"]
+    assert "# [not a section]" in preamble
+
+
+def test_hash_comment_lines_in_code_block_are_untouched():
+    text = (
+        "## [v0.1.0] - 01-01-2026\n\n```\n# a python comment\n# [1, 2, 3]\nx = 1\n```\n"
+    )
+    _preamble, sections = parse_changelog(text)
+    assert [s.name for s in sections] == ["v0.1.0"]
+    out = format_changelog(text)
+    assert "# a python comment" in out
+    assert "# [1, 2, 3]" in out
+    assert "###" not in out  # no comment was rewritten as a sub-header
 
 
 def test_format_changelog_normalizes():

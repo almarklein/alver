@@ -14,16 +14,19 @@ from datetime import date, datetime
 from .version import get_version_tuple
 
 # Matches a section header line, e.g. "## [v1.2.3] - 23-06-2026" or "## [unreleased]".
-# Sections may be written with one to three hashes ("# [...]", "## [...]",
-# "### [...]"); they are always written back with "## ". A version section may
-# already link to its gh release page, e.g. "## [v1.2.3](https://github.com/o/r/
-# releases/tag/v1.2.3)"; the link is stripped on parse and regenerated on render.
+# Sections may be written with two or three hashes ("## [...]", "### [...]");
+# they are always written back with "## ". A single "#" is deliberately not
+# matched: "# ..." is usually a comment (e.g. in a code block), not a header.
+# A version section may already link to its gh release page, e.g.
+# "## [v1.2.3](https://github.com/o/r/releases/tag/v1.2.3)"; the link is
+# stripped on parse and regenerated on render.
 HEADER_RE = re.compile(
-    r"^#{1,3}\s*\[([^\]]*)\](\([^)]*\))?\s*(?:-\s*(.*?))?\s*$", re.MULTILINE
+    r"^#{2,3}\s*\[([^\]]*)\](\([^)]*\))?\s*(?:-\s*(.*?))?\s*$", re.MULTILINE
 )
 
-# Matches a markdown sub-header line inside a section body ("# Foo" or "## Foo").
-SUBHEADER_RE = re.compile(r"^#{1,2} (.*)$", re.MULTILINE)
+# Matches a markdown sub-header line inside a section body ("## Foo"); single
+# "#" lines are left alone (comments). Rewritten as "### Foo" on render.
+SUBHEADER_RE = re.compile(r"^## (.*)$", re.MULTILINE)
 
 # Matches a section name that is a version, e.g. "v1.2.3" or "1.2.3rc1"
 VERSION_NAME_RE = re.compile(r"v?\d+(\.\d+)*[0-9A-Za-z.\-+]*", re.IGNORECASE)
@@ -114,8 +117,8 @@ def parse_changelog(text: str) -> tuple[str, list[Section]]:
 
 def _normalize_body(body: str) -> str:
     """Normalize a section body: at most one blank line (two successive
-    newlines) between lines, and sub-headers written as "# " or "## " are
-    rewritten as "### "."""
+    newlines) between lines, and sub-headers written as "## " are rewritten
+    as "### ". Lines starting with a single "#" are left alone."""
     text = re.sub(r"\n{3,}", "\n\n", body.strip("\n"))
     return SUBHEADER_RE.sub(r"### \1", text)
 
