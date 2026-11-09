@@ -1,0 +1,37 @@
+name: Build
+
+# Reusable workflow: called from release.yml via
+#   uses: ./.github/workflows/build.yml
+# This file is meant to be copied per project; adjust the build steps below
+# to whatever the project needs.
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install build
+
+      # TODO: per-project build steps. Default: build sdist + wheel.
+      - name: Build package
+        run: |
+          pip install .
+          python -m build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

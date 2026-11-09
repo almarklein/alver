@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  # Manual trigger from the Actions tab.
+  workflow_dispatch:
+  # A tag that looks like vx.y.z is pushed.
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+  # A PR from the "release" branch is merged into main.
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  # Per-project build steps live in build.yml (reusable workflow); copy both
+  # files into a project and only edit build.yml.
+  build:
+    uses: ./.github/workflows/build.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag, create the gh release
+      id-token: write # PyPI trusted publishing (OIDC)
+    # Run only for: manual dispatch, a vx.y.z tag push, or a merged
+    # "release" -> main PR.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main' &&
+       github.event.pull_request.head.ref == 'release')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install simpleversion
+        run: pip install .
+
+      - name: Create and push version tag
+        run: |
+          set -e
+          VERSION=$(simpleversion version)
+          TAG="v${VERSION#v}"
+          echo "Detected version $VERSION -> tag $TAG"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          # When triggered by a tag push, the pushed tag must match the version.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            PUSHED_TAG="${GITHUB_REF#refs/tags/}"
+            if [ "$PUSHED_TAG" != "$TAG" ]; then
+              echo "error: pushed tag '$PUSHED_TAG' does not match version $VERSION (expected '$TAG')" >&2
+              exit 1
+            fi
+            echo "Pushed tag $PUSHED_TAG matches version $VERSION."
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The tag may already exist, e.g. when this run was triggered by
+          # pushing exactly this tag; that is fine, as long as it points at
+          # the current commit.
+          git tag "$TAG" 2>/dev/null || echo "Tag $TAG already exists locally, reusing it."
+          if [ "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]; then
+            echo "error: tag $TAG exists but does not point at the current commit (HEAD)" >&2
+            exit 1
+          fi
+          if ! git push origin "$TAG" 2>/dev/null; then
+            echo "Tag $TAG already on the remote; checking it points at this commit."
+            git fetch -q origin "refs/tags/$TAG"
+            if [ "$(git rev-parse "FETCH_HEAD^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "error: remote tag $TAG does not point at the current commit (HEAD)" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Check release notes exist for the tag
+        run: |
+          set -e
+          simpleversion notes "$TAG" > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "error: no release notes in CHANGELOG.md for $TAG; refusing to release" >&2
+            exit 1
+          fi
+          echo "Release notes for $TAG:"
+          cat release-notes.md
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist # artifact uploaded by the build job in build.yml
+          path: dist
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Scoped to the "pypi" GitHub environment, matching the environment
+        # name configured for the pending publisher on pypi.org.
+        environment: pypi
+        # No token/password: uses OIDC trusted publishing (id-token: write).
+
+      - name: Create/publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md --draft=false
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md
+          fi
+          gh release upload "$TAG" dist/* --clobber
