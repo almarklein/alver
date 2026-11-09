@@ -126,3 +126,49 @@ def test_get_detailed_version_of_lib_without_any_version_returns_none(tmp_path):
     # Neither __version__ nor version_info: nothing to base the version on.
     assert get_detailed_version_of_lib(make_module(file=init_file)) is None
     assert get_detailed_version_of_lib(make_module()) is None
+
+
+# ===== already-refined __version__ (set by get_detailed_version earlier)
+
+
+def test_get_detailed_version_of_lib_already_refined_version(tmp_path):
+    # A lib that already set __version__ via get_detailed_version must not get
+    # labels or .post repeated when passed through get_detailed_version_of_lib.
+    _repo, init_file = make_git_repo(tmp_path, tag="v0.1.0", extra_commit=True)
+    module = make_module(file=init_file)
+    module.__version__ = get_detailed_version("0.1.0", str(init_file))
+    assert module.__version__.startswith("0.1.0.post1+g")
+    v = get_detailed_version_of_lib(module)
+    assert v == module.__version__
+    assert v.count("post") == 1
+    assert v.count("+") == 1
+
+
+def test_get_detailed_version_of_lib_already_refined_dirty(tmp_path):
+    _repo, init_file = make_git_repo(tmp_path, tag="v0.1.0", extra_commit=True)
+    init_file.write_text('__version__ = "0.1.0"  # modified, uncommitted\n')
+    module = make_module(file=init_file)
+    module.__version__ = get_detailed_version("0.1.0", str(init_file))
+    assert module.__version__.endswith(".dirty")
+    v = get_detailed_version_of_lib(module)
+    assert v == module.__version__
+    assert v.count("dirty") == 1
+    assert v.count("+") == 1
+
+
+def test_get_detailed_version_of_lib_refined_version_without_git(tmp_path):
+    # E.g. installed from an sdist: no git repo, the refined __version__ is
+    # returned as-is, not mangled or duplicated.
+    f = tmp_path / "mylib" / "__init__.py"
+    f.parent.mkdir(parents=True)
+    module = make_module("0.1.0.post4+gabcdef1.dirty", f)
+    assert get_detailed_version_of_lib(module) == "0.1.0.post4+gabcdef1.dirty"
+
+
+def test_get_detailed_version_of_lib_post_only_version(tmp_path):
+    # A bare ".postN" suffix (no labels) is stripped too, not repeated.
+    _repo, init_file = make_git_repo(tmp_path, tag="v0.1.0", extra_commit=True)
+    module = make_module("0.1.0.post4", init_file)
+    v = get_detailed_version_of_lib(module)
+    assert v.startswith("0.1.0.post1+g")  # current git state wins
+    assert v.count("post") == 1
