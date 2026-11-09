@@ -1,5 +1,7 @@
 import os
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -142,6 +144,20 @@ def test_version_command_outside_git_repo(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         cli.main(["version"])
+
+
+def test_python_m_alver_version(repo):
+    project_root = Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(project_root))
+    p = subprocess.run(
+        [sys.executable, "-m", "alver", "version"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert p.returncode == 0
+    assert p.stdout.strip() == "0.1.0"
 
 
 # ===== bump
