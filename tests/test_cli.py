@@ -357,8 +357,8 @@ def test_changelog_from_gh(repo, fake_gh):
     # unreleased on top, then v0.2.0 (from gh), then v0.1.0 (body updated from gh)
     assert (
         changelog.index("## [unreleased]")
-        < changelog.index(f"## {release_link('v0.2.0')}")
-        < changelog.index(f"## {release_link('v0.1.0')}")
+        < changelog.index(f"## {release_link('v0.2.0')}")  # new section: linked
+        < changelog.index("## [v0.1.0]")  # existing section: left as-is
     )
     assert "* gh release b" in changelog
     assert "* gh release a" in changelog
@@ -370,8 +370,9 @@ def test_changelog_from_gh_single_version(repo, fake_gh):
     changelog = (repo / "CHANGELOG.md").read_text()
     assert f"## {release_link('v0.2.0')}" in changelog
     assert "* gh release b" in changelog
-    # The v0.1.0 release was not processed: its hand-written body is kept.
-    v010_section = changelog.split(f"## {release_link('v0.1.0')}")[1]
+    # The v0.1.0 release was not processed: its hand-written body is kept and
+    # its header is left as-is (no link added to existing sections).
+    v010_section = changelog.split("## [v0.1.0]")[1]
     assert "* one" in v010_section
     assert "* gh release a" not in changelog
 
@@ -395,9 +396,9 @@ def test_changelog_from_gh_unknown_version_adds_no_section(repo, fake_gh):
     assert cli.main(["changelog-from-gh", "v9.9.9"]) == 0
     after = (repo / "CHANGELOG.md").read_text()
     assert "v9.9.9" not in after
-    # Existing sections are preserved; version sections now carry release links.
+    # Existing sections are preserved as-is (no new release links added).
     assert "## [unreleased]" in after
-    assert f"## {release_link('v0.1.0')} - 01-01-2026" in after
+    assert "## [v0.1.0] - 01-01-2026" in after
     assert "* wip" in after and "* one" in after
 
 
