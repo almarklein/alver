@@ -3,32 +3,6 @@ import subprocess
 from pathlib import Path
 
 
-def get_detailed_version(version: str, filename: str):
-    """Get a more detailed version string, based on the git tags and history."""
-
-    # Get path to the library dir, assume that filename is the dir or a file directly in that dir
-    path = Path(filename)
-    project_name = "project"
-    if path.name.endswith(".py"):
-        path = path.parent
-
-    # Get repository dir from that, assume that the repo is exactly one directory up
-    repo_dir = path.parent
-
-    # Get sensible project name, only for reporting warnings and errors
-    project_name = path.name
-    if project_name == "src":
-        project_name = repo_dir.name
-
-    # If the repo_dir is indeed a git repo, do our thing, otherwise, just return given version
-    if repo_dir and repo_dir.joinpath(".git").is_dir():
-        base_version = version.partition("+")[0].partition(".post")[0]  # Sanity
-        getter = DetailedVersionGetter(base_version, project_name, repo_dir)
-        return getter.get_version()
-    else:
-        return version
-
-
 def get_version_tuple(v: str) -> tuple:
     """Given a version string, produce a version tuple, where integer parts are actual integers."""
 
@@ -57,6 +31,61 @@ def get_version_tuple(v: str) -> tuple:
                 parts.append(part)
 
     return tuple(parts)
+
+
+def get_detailed_version_of_lib(module) -> str | None:
+    """Get the detailed version of a library module, based on its git history.
+
+    Uses the module's ``__version__`` as the base version and its ``__file__``
+    to locate the repository (see ``get_detailed_version``).
+    Returns the detailed version string.
+    """
+    # Extract version
+    version = None
+    try:
+        version = module.__version__
+    except AttributeError:
+        pass
+    if version is None:
+        try:
+            version = ".".join(str(i) for i in module.version_info)
+        except AttributeError:
+            pass
+
+    # Try get more details
+    filename = getattr(module, "__file__", None)
+    if version and filename:
+        version = get_detailed_version(version, filename)
+
+    return version
+
+
+def get_detailed_version(version: str, filename: str):
+    """Get a more detailed version string, based on the git tags and history."""
+
+    # Get path to the library dir, assume that filename is the dir or a file directly in that dir
+    path = Path(filename)
+    if path.name.endswith(".py"):
+        path = path.parent
+
+    # Get repository dir from that: walk up until a .git dir is found
+    # (by default the repo is exactly one directory up).
+    repo_dir = path if path.is_dir() else path.parent
+    while repo_dir is not None and not repo_dir.joinpath(".git").is_dir():
+        repo_dir = repo_dir.parent if repo_dir.parent != repo_dir else None
+
+    # Get sensible project name, only for reporting warnings and errors
+    project_name = path.name
+    if project_name == "src" and repo_dir is not None:
+        project_name = repo_dir.name
+
+    # If the repo_dir is indeed a git repo, do our thing, otherwise, just return given version
+    if repo_dir and repo_dir.joinpath(".git").is_dir():
+        base_version = version.partition("+")[0].partition(".post")[0]  # Sanity
+        getter = DetailedVersionGetter(base_version, project_name, repo_dir)
+        return getter.get_version()
+    else:
+        return version
 
 
 class DetailedVersionGetter:

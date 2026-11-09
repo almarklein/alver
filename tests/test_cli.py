@@ -139,7 +139,14 @@ def test_no_command_prints_help(capsys):
     assert cli.main([]) == 2
     out = capsys.readouterr().out
     assert "usage:" in out
-    for cmd in ("bump", "notes", "version", "changelog-from-gh", "changelog-to-gh"):
+    for cmd in (
+        "bump",
+        "notes",
+        "version",
+        "gitversion",
+        "changelog-from-gh",
+        "changelog-to-gh",
+    ):
         assert cmd in out
 
 
@@ -164,6 +171,57 @@ def test_version_command_outside_git_repo(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         cli.main(["version"])
+
+
+# ===== gitversion
+
+
+def test_gitversion_with_tag_and_commits(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path)
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    (repo / "f.txt").write_text("x")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "change"], cwd=repo, check=True)
+    monkeypatch.chdir(repo)
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == "0.1.0"
+    assert cli.main(["gitversion"]) == 0
+    out = capsys.readouterr().out.strip()
+    assert out.startswith("0.1.0.post1+g")  # one commit since tag v0.1.0
+
+
+def test_gitversion_without_tags(repo, capsys):
+    # No tags in the repo: the detailed version is just the plain version.
+    assert cli.main(["gitversion"]) == 0
+    assert capsys.readouterr().out.strip() == "0.1.0"
+
+
+def test_gitversion_with_init_py(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path, version_rel="pkg/__init__.py")
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    (repo / "f.txt").write_text("x")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "change"], cwd=repo, check=True)
+    monkeypatch.chdir(repo)
+    assert cli.main(["gitversion"]) == 0
+    assert capsys.readouterr().out.strip().startswith("0.1.0.post1+g")
+
+
+def test_gitversion_with_pyproject(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path, version_rel="pyproject.toml", version_text=PYPROJECT)
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    (repo / "f.txt").write_text("x")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "change"], cwd=repo, check=True)
+    monkeypatch.chdir(repo)
+    assert cli.main(["gitversion"]) == 0
+    assert capsys.readouterr().out.strip().startswith("0.1.0.post1+g")
+
+
+def test_gitversion_outside_git_repo(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit):
+        cli.main(["gitversion"])
 
 
 def test_python_m_alver_version(repo):
