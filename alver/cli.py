@@ -1,6 +1,6 @@
 """Commands to easily manage releases and changelog
 
-* Run `simpleversion bump vx.y.z`.
+* Run `alver bump vx.y.z`.
 * Edit the changelog as needed.
 * Commit and create a PR for this version bump.
 * When merged, push a tag to roll the release.
@@ -48,7 +48,7 @@ SKIP_DIRS = {
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="simpleversion",
+        prog="alver",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

@@ -2,7 +2,7 @@
 
 [project]
 dynamic = ["version"]
-name = "simpleversion"
+name = "alver"
 description = "Version management made easy"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -18,11 +18,11 @@ dependencies = []
 dev = ["ruff", "pre-commit", "pytest"]
 
 [project.scripts]
-simpleversion = "simpleversion.cli:main"
+alver = "alver.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/pygfx/simpleversion"
-Repository = "https://github.com/pygfx/simpleversion"
+Homepage = "https://github.com/almarklein/alver"
+Repository = "https://github.com/almarklein/alver"
 
 # ===== Building
 

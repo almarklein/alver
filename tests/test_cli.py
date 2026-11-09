@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from simpleversion import cli
+from alver import cli
 
 REMOTE = "git@github.com:acme/widgets.git"
 
@@ -127,7 +127,7 @@ def test_help_shows_multiline_description(capsys):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     # RawDescriptionHelpFormatter keeps the docstring's newlines intact.
-    assert "\n* Run `simpleversion bump" in out
+    assert "\n* Run `alver bump" in out
 
 
 # ===== version

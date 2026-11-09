@@ -43,13 +43,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install simpleversion
+      - name: Install alver
         run: pip install .
 
       - name: Create and push version tag
         run: |
           set -e
-          VERSION=$(simpleversion version)
+          VERSION=$(alver version)
           TAG="v${VERSION#v}"
           echo "Detected version $VERSION -> tag $TAG"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -85,7 +85,7 @@ jobs:
       - name: Check release notes exist for the tag
         run: |
           set -e
-          simpleversion notes "$TAG" > release-notes.md
+          alver notes "$TAG" > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "error: no release notes in CHANGELOG.md for $TAG; refusing to release" >&2
             exit 1
