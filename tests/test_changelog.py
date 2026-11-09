@@ -1,7 +1,7 @@
 import pytest
 
-from simpleversion import changelog
-from simpleversion.changelog import (
+from alver import changelog
+from alver.changelog import (
     Section,
     bump_changelog,
     changelog_from_releases,

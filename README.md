@@ -1,13 +1,13 @@
-# simpleversion
+# alver
 
-Version management and release notes made easy.
+Easily manage versions, releases and changelog. Almar's version tool (went with "simpleversion" first but that was taken).
 
 ```
-usage: simpleversion [-h] {version,bump,notes,changelog-from-gh,changelog-to-gh} ...
+usage: alver [-h] {version,bump,notes,changelog-from-gh,changelog-to-gh} ...
 
 Commands to easily manage releases and changelog
 
-* Run `simpleversion bump vx.y.z`.
+* Run `alver bump vx.y.z`.
 * Edit the changelog as needed.
 * Commit and create a PR for this version bump.
 * When merged, push a tag to roll the release.
