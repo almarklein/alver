@@ -1,7 +1,7 @@
 import pytest
 
-from simpleversion import notes
-from simpleversion.notes import (
+from simpleversion import changelog
+from simpleversion.changelog import (
     Section,
     bump_changelog,
     changelog_from_releases,
@@ -145,7 +145,7 @@ def test_bump_older_version_goes_below_newer():
 
 
 def test_bump_into_empty_changelog():
-    out = bump_changelog(notes.DEFAULT_CHANGELOG, "v1.0.0", "* notes", today=TODAY)
+    out = bump_changelog(changelog.DEFAULT_CHANGELOG, "v1.0.0", "* notes", today=TODAY)
     assert out.startswith("# Changelog / release notes")
     assert f"## [v1.0.0] - {TODAY}" in out
     assert "* notes" in out
