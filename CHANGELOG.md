@@ -12,6 +12,17 @@ Possible sections in each release:
 * Fixed: for any bug fixes.
 * Security: in case of vulnerabilities.
 
+## [1.1.0] - 09-11-2026
+
+## What's Changed
+* Also support version definition in other sources by @almarklein in https://github.com/almarklein/alver/pull/6
+* The changelog-from-gh and changelog-to-gh commands now have a forced version arg by @almarklein in https://github.com/almarklein/alver/pull/7
+* Tweak docs by @almarklein in https://github.com/almarklein/alver/pull/8
+* Add gitversion by @almarklein in https://github.com/almarklein/alver/pull/9
+
+
+**Full Changelog**: https://github.com/almarklein/alver/compare/v1.0.0...1.1.0
+
 ## [v1.0.0] - 09-11-2026
 
 First release!
