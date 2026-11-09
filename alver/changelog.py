@@ -123,32 +123,32 @@ def _normalize_body(body: str) -> str:
     return SUBHEADER_RE.sub(r"### \1", text)
 
 
-def _header_name(s: Section, repo_url: str | None) -> str:
-    """The bracketed section name. With ``repo_url``, version sections are
-    (re)linked to their gh release page; without it, an existing link is kept
-    as-is and no new links are created."""
-    if repo_url and is_version_name(s.name):
-        return f"[{s.name}]({repo_url}/releases/tag/{s.name})"
+def _release_link(name: str, repo_url: str | None) -> str:
+    """The gh release page url for a version section name, or "" if none."""
+    if repo_url and is_version_name(name):
+        return f"{repo_url}/releases/tag/{name}"
+    return ""
+
+
+def _header_name(s: Section) -> str:
+    """The bracketed section name, with the section's release link (if any)."""
     if s.link:
         return f"[{s.name}]({s.link})"
     return f"[{s.name}]"
 
 
-def render_changelog(
-    preamble: str, sections: list[Section], repo_url: str | None = None
-) -> str:
+def render_changelog(preamble: str, sections: list[Section]) -> str:
     """Compose changelog text from a preamble and sections, in canonical format.
 
     Section headers are always written as ``## [name]`` (regardless of how they
-    were written). If ``repo_url`` is given (e.g. "https://github.com/o/r"),
-    version sections are (re)linked to their gh release page; without it,
-    existing links are kept as-is and no new links are created. Sections are
-    separated by exactly two blank lines, within a section there is at most
-    one blank line, and sub-headers inside a section are written as ``### ``.
+    were written), with the section's existing link (if any) kept as-is.
+    Sections are separated by exactly two blank lines, within a section there
+    is at most one blank line, and sub-headers inside a section are written
+    as ``### ``.
     """
     blocks = []
     for s in sections:
-        header = f"## {_header_name(s, repo_url)}"
+        header = f"## {_header_name(s)}"
         if s.date:
             header += f" - {s.date}"
         body = _normalize_body(s.body)
@@ -162,12 +162,12 @@ def render_changelog(
     return "\n\n\n".join(parts) + "\n"
 
 
-def format_changelog(text: str, repo_url: str | None = None) -> str:
+def format_changelog(text: str) -> str:
     """Format changelog text into the canonical format (see ``render_changelog``),
-    preserving the order of the sections. Without ``repo_url``, existing
-    release links are kept as-is and no new links are created."""
+    preserving the order of the sections and any existing release links; no
+    new links are created."""
     preamble, sections = parse_changelog(text)
-    return render_changelog(preamble, sections, repo_url)
+    return render_changelog(preamble, sections)
 
 
 def bump_changelog(
@@ -194,7 +194,11 @@ def bump_changelog(
     target = next((s for s in sections if norm_version(s.name) == v), None)
 
     if target is None:
-        target = Section(name=version, date=today)
+        # A newly added section gets a link to its gh release page; existing
+        # sections are left as they are.
+        target = Section(
+            name=version, date=today, link=_release_link(version, repo_url)
+        )
         sections.append(target)
     if unreleased is not None:
         sections.remove(unreleased)
@@ -212,7 +216,7 @@ def bump_changelog(
         parts.append(notes_chunk)
     target.body = "\n\n".join(parts)
 
-    return render_changelog(preamble, sort_sections(sections), repo_url)
+    return render_changelog(preamble, sort_sections(sections))
 
 
 def changelog_from_releases(
@@ -249,14 +253,23 @@ def changelog_from_releases(
             merged.append(existing)
             used.add(key)
         else:
-            merged.append(Section(name=tag, date=date_str, body=body))
+            # A newly added section gets a link to its gh release page;
+            # existing sections are left as they are.
+            merged.append(
+                Section(
+                    name=tag,
+                    date=date_str,
+                    body=body,
+                    link=_release_link(tag, repo_url),
+                )
+            )
 
     # Keep all other existing sections (including [unreleased]/[pending]).
     for s in sections:
         if norm_version(s.name) not in used:
             merged.append(s)
 
-    return render_changelog(preamble, sort_sections(merged), repo_url)
+    return render_changelog(preamble, sort_sections(merged))
 
 
 def iso_to_changelog_date(s: str) -> str:

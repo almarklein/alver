@@ -378,35 +378,47 @@ def test_format_changelog_without_repo_url_never_creates_links():
     assert format_changelog(plain) == plain
 
 
-def test_render_links_version_sections_only():
-    sections = [
-        Section("unreleased", body="* wip"),
-        Section("v0.2.0", date="01-02-2026", body="* two"),
-    ]
-    out = render_changelog("# Changelog\n\n", sections, repo_url=REPO_URL)
-    assert "## [unreleased]\n" in out  # not a version: no link
+def test_render_writes_section_link_if_present():
+    linked = Section("v0.2.0", date="01-02-2026", body="* two")
+    linked.link = f"{REPO_URL}/releases/tag/v0.2.0"
+    sections = [Section("unreleased", body="* wip"), linked]
+    out = render_changelog("# Changelog\n\n", sections)
+    assert "## [unreleased]\n" in out  # no link stored: plain header
     assert f"## {release_link('v0.2.0')} - 01-02-2026" in out
 
 
-def test_format_changelog_with_links_is_idempotent():
+def test_format_changelog_preserves_links():
     text = (
         "# Changelog\n\n\n"
         "## [unreleased]\n\n* wip\n\n\n"
         f"## {release_link('v0.2.0')} - 01-02-2026\n\n* two\n"
     )
-    assert format_changelog(text, repo_url=REPO_URL) == text
+    assert format_changelog(text) == text
 
 
-def test_bump_changelog_links_version_sections():
+def test_bump_changelog_links_only_the_new_section():
     out = bump_changelog(SAMPLE, "v0.3.0", "* notes", today=TODAY, repo_url=REPO_URL)
-    assert f"## {release_link('v0.3.0')} - {TODAY}" in out
-    # Existing version sections get linked too.
-    assert f"## {release_link('v0.2.0')} - 01-02-2026" in out
-    # [unreleased] is consumed by the bump and has no link anyway.
-    assert "## [unreleased]" not in out
+    assert f"## {release_link('v0.3.0')} - {TODAY}" in out  # new section: linked
+    # Existing sections are left as they are (no link added).
+    assert "## [v0.2.0] - 01-02-2026" in out
+    assert release_link("v0.2.0") not in out
+    assert "## [unreleased]" not in out  # consumed by the bump
 
 
-def test_changelog_from_releases_links_version_sections():
-    releases = [{"tag": "v0.3.0", "date": "2026-10-01T10:00:00Z", "body": "* three"}]
+def test_bump_changelog_existing_section_is_not_linked():
+    # Bumping a version that already has a section leaves that header as-is.
+    out = bump_changelog(SAMPLE, "v0.2.0", "* notes", today=TODAY, repo_url=REPO_URL)
+    assert "## [v0.2.0] - 01-02-2026" in out
+    assert release_link("v0.2.0") not in out
+
+
+def test_changelog_from_releases_links_only_new_sections():
+    releases = [
+        {"tag": "v0.3.0", "date": "2026-10-01T10:00:00Z", "body": "* three"},
+        {"tag": "v0.2.0", "date": "2026-09-15T10:00:00Z", "body": "* gh two"},
+    ]
     out = changelog_from_releases(SAMPLE, releases, repo_url=REPO_URL)
-    assert f"## {release_link('v0.3.0')} - 01-10-2026" in out
+    assert f"## {release_link('v0.3.0')} - 01-10-2026" in out  # new section: linked
+    # v0.2.0 already existed: its date is updated from gh, but no link is added.
+    assert "## [v0.2.0] - 15-09-2026" in out
+    assert release_link("v0.2.0") not in out
