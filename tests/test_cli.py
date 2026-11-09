@@ -55,6 +55,23 @@ sys.exit(1)
 """
 
 
+PYPROJECT = """\
+[project]
+name = "widgets"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.other]
+version = "9.9.9"
+"""
+
+DYNAMIC_PYPROJECT = """\
+[project]
+name = "widgets"
+dynamic = ["version"]
+"""
+
+
 def make_repo(
     tmp_path,
     *,
@@ -62,8 +79,9 @@ def make_repo(
     version_rel="pkg/_version.py",
     changelog=None,
     remote=REMOTE,
+    version_text=None,
 ):
-    """Create a git repo in tmp_path with a _version.py and optional CHANGELOG.md."""
+    """Create a git repo in tmp_path with a version file and optional CHANGELOG.md."""
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -76,7 +94,9 @@ def make_repo(
     git("remote", "add", "origin", remote)
     version_file = repo / version_rel
     version_file.parent.mkdir(parents=True, exist_ok=True)
-    version_file.write_text(f'__version__ = "{version}"\n')
+    if version_text is None:
+        version_text = f'__version__ = "{version}"\n'
+    version_file.write_text(version_text)
     if changelog is not None:
         (repo / "CHANGELOG.md").write_text(changelog)
     git("add", "-A")
@@ -160,6 +180,20 @@ def test_python_m_alver_version(repo):
     assert p.stdout.strip() == "0.1.0"
 
 
+def test_version_command_with_init_py(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path, version_rel="pkg/__init__.py")
+    monkeypatch.chdir(repo)
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == "0.1.0"
+
+
+def test_version_command_with_pyproject(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path, version_rel="pyproject.toml", version_text=PYPROJECT)
+    monkeypatch.chdir(repo)
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == "0.1.0"
+
+
 # ===== bump
 
 
@@ -186,6 +220,29 @@ def test_bump_merges_unreleased(repo, fake_gh):
 def test_bump_invalid_version(repo, fake_gh):
     with pytest.raises(SystemExit):
         cli.main(["bump", "not-a-version"])
+
+
+def test_bump_updates_init_py(tmp_path, monkeypatch, fake_gh):
+    repo = make_repo(tmp_path, version_rel="pkg/__init__.py", changelog=CHANGELOG)
+    monkeypatch.chdir(repo)
+    assert cli.main(["bump", "v0.2.0"]) == 0
+    assert '__version__ = "0.2.0"' in (repo / "pkg/__init__.py").read_text()
+
+
+def test_bump_updates_pyproject_project_version(tmp_path, monkeypatch, fake_gh):
+    repo = make_repo(
+        tmp_path,
+        version_rel="pyproject.toml",
+        version_text=PYPROJECT,
+        changelog=CHANGELOG,
+    )
+    monkeypatch.chdir(repo)
+    assert cli.main(["bump", "v0.2.0"]) == 0
+    text = (repo / "pyproject.toml").read_text()
+    assert 'version = "0.2.0"' in text
+    # Other tables and keys are left alone.
+    assert 'version = "9.9.9"' in text
+    assert 'requires-python = ">=3.10"' in text
 
 
 def test_bump_falls_back_to_git_log_without_gh(tmp_path, monkeypatch, capsys):
@@ -327,3 +384,41 @@ def test_find_version_file_missing(tmp_path):
     (repo / "pkg" / "_version.py").unlink()
     with pytest.raises(SystemExit):
         cli.find_version_file(repo)
+
+
+def test_find_version_file_init_py(tmp_path):
+    repo = make_repo(tmp_path, version_rel="pkg/__init__.py")
+    assert cli.find_version_file(repo) == repo / "pkg" / "__init__.py"
+
+
+def test_find_version_file_ignores_init_py_without_version_assignment(tmp_path):
+    repo = make_repo(tmp_path, version_rel="pkg/_version.py")
+    (repo / "pkg" / "__init__.py").write_text("from ._version import __version__\n")
+    assert cli.find_version_file(repo) == repo / "pkg" / "_version.py"
+
+
+def test_find_version_file_prefers_shallowest_pyproject(tmp_path):
+    repo = make_repo(tmp_path, version_rel="pkg/_version.py")
+    (repo / "pyproject.toml").write_text(PYPROJECT)
+    assert cli.find_version_file(repo) == repo / "pyproject.toml"
+
+
+def test_find_version_file_ignores_dynamic_pyproject(tmp_path):
+    repo = make_repo(tmp_path, version_rel="pkg/_version.py")
+    (repo / "pyproject.toml").write_text(DYNAMIC_PYPROJECT)
+    assert cli.find_version_file(repo) == repo / "pkg" / "_version.py"
+
+
+def test_set_version_in_file_pyproject_scopes_to_project_table(tmp_path):
+    f = tmp_path / "pyproject.toml"
+    f.write_text(PYPROJECT)
+    assert cli.set_version_in_file(f, "1.2.3") == "0.1.0"
+    text = f.read_text()
+    assert 'version = "1.2.3"' in text
+    assert 'version = "9.9.9"' in text  # [tool.other] untouched
+
+
+def test_load_version_pyproject(tmp_path):
+    f = tmp_path / "pyproject.toml"
+    f.write_text(PYPROJECT)
+    assert cli.load_version(f) == "0.1.0"
