@@ -137,9 +137,7 @@ def bump_changelog(
     preamble, sections = parse_changelog(text)
     v = norm_version(version)
 
-    unreleased = next(
-        (s for s in sections if s.name.lower() in UNRELEASED_NAMES), None
-    )
+    unreleased = next((s for s in sections if s.name.lower() in UNRELEASED_NAMES), None)
     target = next((s for s in sections if norm_version(s.name) == v), None)
 
     if target is None:

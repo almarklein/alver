@@ -106,7 +106,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def cmd_changelog_to_gh() -> int:
     repo_dir = get_repo_dir()
-    changelog_file = get_changelog_file(repo_dir)  # must exist; nothing to push otherwise
+    changelog_file = get_changelog_file(
+        repo_dir
+    )  # must exist; nothing to push otherwise
     owner, repo = get_owner_repo(repo_dir)
     releases = get_gh_releases(owner, repo, repo_dir)
 
@@ -200,7 +202,9 @@ def cmd_bump(version: str) -> int:
     )
     changelog_file.write_text(new_text, encoding="utf-8")
 
-    print(f"Bumped {version_file.relative_to(repo_dir)}: {old_version} -> {plain_version}")
+    print(
+        f"Bumped {version_file.relative_to(repo_dir)}: {old_version} -> {plain_version}"
+    )
     print(
         f"Updated {changelog_file.relative_to(repo_dir)}: section [{version}] "
         f"with release notes from {source} ({owner}/{repo})"
@@ -225,9 +229,7 @@ def cmd_extract(version: str) -> int:
 
 
 def run_git(repo_dir: Path, *args: str) -> str:
-    p = subprocess.run(
-        ["git", *args], cwd=repo_dir, capture_output=True, text=True
-    )
+    p = subprocess.run(["git", *args], cwd=repo_dir, capture_output=True, text=True)
     if p.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {p.stderr.strip()}")
     return p.stdout.strip()
@@ -339,9 +341,11 @@ def get_release_notes(
     if p2 is not None and p2.returncode == 0 and p2.stdout.strip():
         return p2.stdout.strip("\n"), "gh"
 
-    err_src = (p2.stderr if p2 is not None else "") or (
-        p.stderr if p is not None else ""
-    ) or "gh executable not found"
+    err_src = (
+        (p2.stderr if p2 is not None else "")
+        or (p.stderr if p is not None else "")
+        or "gh executable not found"
+    )
     err_lines = err_src.strip().splitlines()
     err = err_lines[-1] if err_lines else "unknown error"
     print(
@@ -360,13 +364,15 @@ def get_gh_releases(owner: str, repo: str, repo_dir: Path) -> list[dict]:
         "--paginate",
         f"repos/{owner}/{repo}/releases?per_page=100",
         "--jq",
-        ".[] | select(.draft | not) | {id: .id, tag: .tag_name, date: .published_at, body: (.body // \"\")}",
+        '.[] | select(.draft | not) | {id: .id, tag: .tag_name, date: .published_at, body: (.body // "")}',
     ]
     p = _run_gh(cmd, repo_dir)
     if p is None:
         sys.exit("error: gh executable not found; cannot list releases")
     if p.returncode != 0:
-        sys.exit(f"error: could not list gh releases for {owner}/{repo}: {p.stderr.strip()}")
+        sys.exit(
+            f"error: could not list gh releases for {owner}/{repo}: {p.stderr.strip()}"
+        )
     # The jq filter emits one compact JSON object per line.
     return [json.loads(line) for line in p.stdout.splitlines() if line.strip()]
 
