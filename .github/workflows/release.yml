@@ -24,6 +24,9 @@ jobs:
     permissions:
       contents: write # push the tag, create the gh release
       id-token: write # PyPI trusted publishing (OIDC)
+    # Scoped to the "pypi" GitHub environment, matching the environment
+    # name configured for the pending publisher on pypi.org.
+    environment: pypi
     # Run only for: manual dispatch, a vx.y.z tag push, or a merged
     # "release" -> main PR.
     if: >-
@@ -101,10 +104,8 @@ jobs:
 
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Scoped to the "pypi" GitHub environment, matching the environment
-        # name configured for the pending publisher on pypi.org.
-        environment: pypi
-        # No token/password: uses OIDC trusted publishing (id-token: write).
+        # No token/password: uses OIDC trusted publishing (id-token: write),
+        # scoped via the job-level "pypi" environment.
 
       - name: Create/publish GitHub release
         env:
