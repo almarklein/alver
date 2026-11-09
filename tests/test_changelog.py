@@ -322,3 +322,70 @@ def test_render_collapses_excess_blank_lines_within_section():
 
 def test_format_changelog_empty():
     assert format_changelog("") == ""
+
+
+# ===== gh release links in section headers
+
+REPO_URL = "https://github.com/acme/widgets"
+
+
+def release_link(v: str) -> str:
+    return f"[{v}]({REPO_URL}/releases/tag/{v})"
+
+
+def test_parse_strips_release_links():
+    text = f"## {release_link('v0.2.0')} - 01-02-2026\n\n* two\n"
+    _preamble, sections = parse_changelog(text)
+    assert sections[0].name == "v0.2.0"
+    assert sections[0].date == "01-02-2026"
+    assert sections[0].link == f"{REPO_URL}/releases/tag/v0.2.0"
+
+
+def test_render_keeps_existing_link_without_repo_url():
+    s = Section("v0.2.0", date="01-02-2026", body="* two")
+    s.link = f"{REPO_URL}/releases/tag/v0.2.0"
+    out = render_changelog("", [s])  # no repo_url: keep link, create none
+    assert f"## {release_link('v0.2.0')} - 01-02-2026" in out
+
+
+def test_format_changelog_without_repo_url_never_creates_links():
+    # Existing link is preserved as-is ...
+    linked = f"## {release_link('v0.2.0')} - 01-02-2026\n\n* two\n"
+    assert format_changelog(linked) == linked
+    # ... and an unlinked version section stays unlinked.
+    plain = "## [v0.2.0] - 01-02-2026\n\n* two\n"
+    assert format_changelog(plain) == plain
+
+
+def test_render_links_version_sections_only():
+    sections = [
+        Section("unreleased", body="* wip"),
+        Section("v0.2.0", date="01-02-2026", body="* two"),
+    ]
+    out = render_changelog("# Changelog\n\n", sections, repo_url=REPO_URL)
+    assert "## [unreleased]\n" in out  # not a version: no link
+    assert f"## {release_link('v0.2.0')} - 01-02-2026" in out
+
+
+def test_format_changelog_with_links_is_idempotent():
+    text = (
+        "# Changelog\n\n\n"
+        "## [unreleased]\n\n* wip\n\n\n"
+        f"## {release_link('v0.2.0')} - 01-02-2026\n\n* two\n"
+    )
+    assert format_changelog(text, repo_url=REPO_URL) == text
+
+
+def test_bump_changelog_links_version_sections():
+    out = bump_changelog(SAMPLE, "v0.3.0", "* notes", today=TODAY, repo_url=REPO_URL)
+    assert f"## {release_link('v0.3.0')} - {TODAY}" in out
+    # Existing version sections get linked too.
+    assert f"## {release_link('v0.2.0')} - 01-02-2026" in out
+    # [unreleased] is consumed by the bump and has no link anyway.
+    assert "## [unreleased]" not in out
+
+
+def test_changelog_from_releases_links_version_sections():
+    releases = [{"tag": "v0.3.0", "date": "2026-10-01T10:00:00Z", "body": "* three"}]
+    out = changelog_from_releases(SAMPLE, releases, repo_url=REPO_URL)
+    assert f"## {release_link('v0.3.0')} - 01-10-2026" in out

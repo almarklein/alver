@@ -8,6 +8,13 @@ import pytest
 from alver import cli
 
 REMOTE = "git@github.com:acme/widgets.git"
+REPO_URL = "https://github.com/acme/widgets"
+
+
+def release_link(v: str) -> str:
+    """The linked section header name for version v, as written by alver."""
+    return f"[{v}]({REPO_URL}/releases/tag/{v})"
+
 
 CHANGELOG = """# Changelog
 
@@ -266,7 +273,7 @@ def test_bump_creates_changelog_and_updates_version(
     assert cli.main(["bump", "v0.2.0"]) == 0
     assert '__version__ = "0.2.0"' in (repo / "pkg/_version.py").read_text()
     changelog = (repo / "CHANGELOG.md").read_text()
-    assert "## [v0.2.0] - " in changelog
+    assert f"## {release_link('v0.2.0')} - " in changelog
     assert "* gh generated note" in changelog
 
 
@@ -274,7 +281,7 @@ def test_bump_merges_unreleased(repo, fake_gh):
     assert cli.main(["bump", "v0.2.0"]) == 0
     changelog = (repo / "CHANGELOG.md").read_text()
     assert "[unreleased]" not in changelog
-    section = changelog.split("## [v0.2.0]")[1]
+    section = changelog.split(f"## {release_link('v0.2.0')}")[1]
     assert "* wip" in section and "* gh generated note" in section
 
 
@@ -350,8 +357,8 @@ def test_changelog_from_gh(repo, fake_gh):
     # unreleased on top, then v0.2.0 (from gh), then v0.1.0 (body updated from gh)
     assert (
         changelog.index("## [unreleased]")
-        < changelog.index("## [v0.2.0]")
-        < changelog.index("## [v0.1.0]")
+        < changelog.index(f"## {release_link('v0.2.0')}")
+        < changelog.index(f"## {release_link('v0.1.0')}")
     )
     assert "* gh release b" in changelog
     assert "* gh release a" in changelog
@@ -361,10 +368,10 @@ def test_changelog_from_gh(repo, fake_gh):
 def test_changelog_from_gh_single_version(repo, fake_gh):
     assert cli.main(["changelog-from-gh", "v0.2.0"]) == 0
     changelog = (repo / "CHANGELOG.md").read_text()
-    assert "## [v0.2.0]" in changelog
+    assert f"## {release_link('v0.2.0')}" in changelog
     assert "* gh release b" in changelog
     # The v0.1.0 release was not processed: its hand-written body is kept.
-    v010_section = changelog.split("## [v0.1.0]")[1]
+    v010_section = changelog.split(f"## {release_link('v0.1.0')}")[1]
     assert "* one" in v010_section
     assert "* gh release a" not in changelog
 
@@ -384,10 +391,14 @@ def test_changelog_from_gh_partial_wildcard(repo, fake_gh):
     assert "* gh release a" not in changelog
 
 
-def test_changelog_from_gh_unknown_version_changes_nothing(repo, fake_gh):
-    before = (repo / "CHANGELOG.md").read_text()
+def test_changelog_from_gh_unknown_version_adds_no_section(repo, fake_gh):
     assert cli.main(["changelog-from-gh", "v9.9.9"]) == 0
-    assert (repo / "CHANGELOG.md").read_text() == before
+    after = (repo / "CHANGELOG.md").read_text()
+    assert "v9.9.9" not in after
+    # Existing sections are preserved; version sections now carry release links.
+    assert "## [unreleased]" in after
+    assert f"## {release_link('v0.1.0')} - 01-01-2026" in after
+    assert "* wip" in after and "* one" in after
 
 
 def test_changelog_from_gh_creates_file(tmp_path, monkeypatch, fake_gh):
@@ -424,12 +435,35 @@ def test_format_command(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(repo)
     assert cli.main(["format"]) == 0
     out = (repo / "CHANGELOG.md").read_text()
+    # format does not create release links (bump / changelog-from-gh do).
     assert out == (
         "# Changelog\n\n\n"
         "## [unreleased]\n\n* wip\n\n\n"
         "## [v0.1.0] - 01-01-2026\n\n* one\n\n### Sub\n"
     )
     assert "Formatted CHANGELOG.md" in capsys.readouterr().out
+
+
+def test_format_command_preserves_existing_links(tmp_path, monkeypatch):
+    changelog = f"# Changelog\n\n\n## {release_link('v0.1.0')} - 01-01-2026\n\n* one\n"
+    repo = make_repo(tmp_path, changelog=changelog)
+    monkeypatch.chdir(repo)
+    assert cli.main(["format"]) == 0
+    out = (repo / "CHANGELOG.md").read_text()
+    assert f"## {release_link('v0.1.0')} - 01-01-2026" in out
+
+
+def test_format_command_without_github_remote_adds_no_links(tmp_path, monkeypatch):
+    repo = make_repo(
+        tmp_path,
+        changelog=MESSY_CHANGELOG,
+        remote="https://gitlab.com/acme/widgets.git",
+    )
+    monkeypatch.chdir(repo)
+    assert cli.main(["format"]) == 0
+    out = (repo / "CHANGELOG.md").read_text()
+    assert "## [v0.1.0] - 01-01-2026" in out  # plain header, no link
+    assert "](http" not in out
 
 
 def test_format_command_requires_changelog(tmp_path, monkeypatch):

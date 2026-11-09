@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser(
         "format",
-        help="Format CHANGELOG.md in place, fixes section headers and blanc lines.",
+        help="Format CHANGELOG.md in place, fixes section headers and blank lines.",
     )
 
     p_bump = sub.add_parser(
@@ -194,8 +194,9 @@ def cmd_changelog_from_gh(version: str) -> int:
     releases = [
         r for r in releases if version_matches(version, str(r.get("tag") or ""))
     ]
+    repo_url = f"https://github.com/{owner}/{repo}"
     new_text = changelog.changelog_from_releases(
-        changelog_file.read_text(encoding="utf-8"), releases
+        changelog_file.read_text(encoding="utf-8"), releases, repo_url=repo_url
     )
     changelog_file.write_text(new_text, encoding="utf-8")
     print(
@@ -224,6 +225,8 @@ def cmd_format() -> int:
     repo_dir = get_repo_dir()
     changelog_file = get_changelog_file(repo_dir)  # must exist
     text = changelog_file.read_text(encoding="utf-8")
+    # No repo_url: format normalizes spacing/headers but does not create new
+    # release links; existing links are left intact.
     new_text = changelog.format_changelog(text)
     changelog_file.write_text(new_text, encoding="utf-8")
     print(f"Formatted {changelog_file.relative_to(repo_dir)}")
@@ -270,8 +273,12 @@ def cmd_bump(version: str) -> int:
     # but __version__ itself must be a plain PEP 440 version (1.2.3).
     plain_version = version[1:] if version[:1].lower() == "v" else version
     old_version = set_version_in_file(version_file, plain_version)
+    repo_url = f"https://github.com/{owner}/{repo}"
     new_text = changelog.bump_changelog(
-        changelog_file.read_text(encoding="utf-8"), version, release_notes
+        changelog_file.read_text(encoding="utf-8"),
+        version,
+        release_notes,
+        repo_url=repo_url,
     )
     changelog_file.write_text(new_text, encoding="utf-8")
 
@@ -315,20 +322,34 @@ def get_repo_dir() -> Path:
         sys.exit(f"error: not inside a git repository ({e})")
 
 
+def try_get_owner_repo(repo_dir: Path) -> tuple[str, str] | None:
+    """Derive (owner, repo) from the git remote url; None if not possible."""
+    try:
+        remotes = run_git(repo_dir, "remote").split()
+        if not remotes:
+            return None
+        name = "origin" if "origin" in remotes else remotes[0]
+        url = run_git(repo_dir, "remote", "get-url", name)
+    except RuntimeError:
+        return None
+    m = GITHUB_REMOTE_RE.search(url)
+    return (m.group("owner"), m.group("repo")) if m else None
+
+
 def get_owner_repo(repo_dir: Path) -> tuple[str, str]:
     """Derive (owner, repo) from the git remote url, e.g. git@github.com:o/r.git."""
+    result = try_get_owner_repo(repo_dir)
+    if result is not None:
+        return result
     remotes = run_git(repo_dir, "remote").split()
     if not remotes:
         sys.exit(f"error: no git remote configured in {repo_dir}")
     name = "origin" if "origin" in remotes else remotes[0]
     url = run_git(repo_dir, "remote", "get-url", name)
-    m = GITHUB_REMOTE_RE.search(url)
-    if not m:
-        sys.exit(
-            f"error: could not derive org/repo from remote {name!r} url {url!r} "
-            "(only github.com remotes are supported)"
-        )
-    return m.group("owner"), m.group("repo")
+    sys.exit(
+        f"error: could not derive org/repo from remote {name!r} url {url!r} "
+        "(only github.com remotes are supported)"
+    )
 
 
 def get_changelog_file(repo_dir: Path, create: bool = False) -> Path:
