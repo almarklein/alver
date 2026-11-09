@@ -45,7 +45,7 @@ positional arguments:
   {version,bump,notes,changelog-from-gh,changelog-to-gh}
     version             Print the current project version (from _version.py, __init__.py, or pyproject.toml).
     gitversion          Print the detailed project version based on git tags and history (like 'version', but refined), e.g. 1.2.3.post4+gabcdef1.
-    format              Format CHANGELOG.md in place, fixes section headers and blanc lines.
+    format              Format CHANGELOG.md in place, fixes section headers and blank lines.
     bump                Bump to the given version and add a changelog section with gh-generated release notes, e.g. `alver bump v1.2.3`.
     notes               Print the release notes for the given version from CHANGELOG.md, e.g. `alver notes v1.2.3`.
     changelog-from-gh   Create/update CHANGELOG.md sections from the GitHub releases of this repo for the given version, e.g. `alver

@@ -15,8 +15,12 @@ from .version import get_version_tuple
 
 # Matches a section header line, e.g. "## [v1.2.3] - 23-06-2026" or "## [unreleased]".
 # Sections may be written with one to three hashes ("# [...]", "## [...]",
-# "### [...]"); they are always written back with "## ".
-HEADER_RE = re.compile(r"^#{1,3}\s*\[([^\]]*)\]\s*(?:-\s*(.*?))?\s*$", re.MULTILINE)
+# "### [...]"); they are always written back with "## ". A version section may
+# already link to its gh release page, e.g. "## [v1.2.3](https://github.com/o/r/
+# releases/tag/v1.2.3)"; the link is stripped on parse and regenerated on render.
+HEADER_RE = re.compile(
+    r"^#{1,3}\s*\[([^\]]*)\](\([^)]*\))?\s*(?:-\s*(.*?))?\s*$", re.MULTILINE
+)
 
 # Matches a markdown sub-header line inside a section body ("# Foo" or "## Foo").
 SUBHEADER_RE = re.compile(r"^#{1,2} (.*)$", re.MULTILINE)
@@ -52,6 +56,7 @@ class Section:
     name: str
     date: str = ""
     body: str = ""
+    link: str = ""  # existing release-page link (url without parens), if any
 
 
 def norm_version(v: str) -> str:
@@ -95,11 +100,13 @@ def parse_changelog(text: str) -> tuple[str, list[Section]]:
     sections = []
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        raw_link = m.group(2) or ""
         sections.append(
             Section(
                 name=m.group(1).strip(),
-                date=(m.group(2) or "").strip(),
+                date=(m.group(3) or "").strip(),
                 body=text[m.end() : end],
+                link=raw_link[1:-1] if raw_link else "",
             )
         )
     return preamble, sections
@@ -113,17 +120,32 @@ def _normalize_body(body: str) -> str:
     return SUBHEADER_RE.sub(r"### \1", text)
 
 
-def render_changelog(preamble: str, sections: list[Section]) -> str:
+def _header_name(s: Section, repo_url: str | None) -> str:
+    """The bracketed section name. With ``repo_url``, version sections are
+    (re)linked to their gh release page; without it, an existing link is kept
+    as-is and no new links are created."""
+    if repo_url and is_version_name(s.name):
+        return f"[{s.name}]({repo_url}/releases/tag/{s.name})"
+    if s.link:
+        return f"[{s.name}]({s.link})"
+    return f"[{s.name}]"
+
+
+def render_changelog(
+    preamble: str, sections: list[Section], repo_url: str | None = None
+) -> str:
     """Compose changelog text from a preamble and sections, in canonical format.
 
     Section headers are always written as ``## [name]`` (regardless of how they
-    were written), sections are separated by exactly two blank lines, within a
-    section there is at most one blank line, and sub-headers inside a section
-    are written as ``### ``.
+    were written). If ``repo_url`` is given (e.g. "https://github.com/o/r"),
+    version sections are (re)linked to their gh release page; without it,
+    existing links are kept as-is and no new links are created. Sections are
+    separated by exactly two blank lines, within a section there is at most
+    one blank line, and sub-headers inside a section are written as ``### ``.
     """
     blocks = []
     for s in sections:
-        header = f"## [{s.name}]"
+        header = f"## {_header_name(s, repo_url)}"
         if s.date:
             header += f" - {s.date}"
         body = _normalize_body(s.body)
@@ -137,15 +159,20 @@ def render_changelog(preamble: str, sections: list[Section]) -> str:
     return "\n\n\n".join(parts) + "\n"
 
 
-def format_changelog(text: str) -> str:
+def format_changelog(text: str, repo_url: str | None = None) -> str:
     """Format changelog text into the canonical format (see ``render_changelog``),
-    preserving the order of the sections."""
+    preserving the order of the sections. Without ``repo_url``, existing
+    release links are kept as-is and no new links are created."""
     preamble, sections = parse_changelog(text)
-    return render_changelog(preamble, sections)
+    return render_changelog(preamble, sections, repo_url)
 
 
 def bump_changelog(
-    text: str, version: str, release_notes: str, today: str | None = None
+    text: str,
+    version: str,
+    release_notes: str,
+    today: str | None = None,
+    repo_url: str | None = None,
 ) -> str:
     """Return updated changelog text for releasing ``version``.
 
@@ -182,10 +209,12 @@ def bump_changelog(
         parts.append(notes_chunk)
     target.body = "\n\n".join(parts)
 
-    return render_changelog(preamble, sort_sections(sections))
+    return render_changelog(preamble, sort_sections(sections), repo_url)
 
 
-def changelog_from_releases(text: str, releases: list[dict]) -> str:
+def changelog_from_releases(
+    text: str, releases: list[dict], repo_url: str | None = None
+) -> str:
     """Create/update changelog sections from gh releases (expected newest first).
 
     Each release is a dict with keys ``tag``, ``date`` (ISO string) and ``body``.
@@ -224,7 +253,7 @@ def changelog_from_releases(text: str, releases: list[dict]) -> str:
         if norm_version(s.name) not in used:
             merged.append(s)
 
-    return render_changelog(preamble, sort_sections(merged))
+    return render_changelog(preamble, sort_sections(merged), repo_url)
 
 
 def iso_to_changelog_date(s: str) -> str:
