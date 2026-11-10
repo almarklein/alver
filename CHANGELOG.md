@@ -13,6 +13,14 @@ Possible sections in each release:
 * Security: in case of vulnerabilities.
 
 
+## [1.2.1](https://github.com/almarklein/alver/releases/tag/1.2.1) - 10-11-2026
+
+### What's Changed
+* Tweak release.yml by @almarklein in https://github.com/almarklein/alver/pull/19
+
+**Full Changelog**: https://github.com/almarklein/alver/compare/v1.2.0...1.2.1
+
+
 ## [v1.2.0](https://github.com/almarklein/alver/releases/tag/v1.2.0) - 10-11-2026
 
 ### What's Changed
