@@ -183,6 +183,31 @@ def test_version_command_outside_git_repo(tmp_path, monkeypatch):
         cli.main(["version"])
 
 
+def test_version_command_reads_source_without_importing(tmp_path, monkeypatch, capsys):
+    # The version file contains code with a side effect; `alver version` must
+    # read the literal __version__ assignment without executing the module.
+    repo = make_repo(
+        tmp_path,
+        version_text=(
+            '__version__ = "7.8.9"\n'
+            "import os\n"
+            'os.environ["ALVER_VERSION_FILE_WAS_EXECUTED"] = "1"\n'
+        ),
+    )
+    monkeypatch.chdir(repo)
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == "7.8.9"
+    assert "ALVER_VERSION_FILE_WAS_EXECUTED" not in os.environ
+
+
+def test_load_version_does_not_execute_module(tmp_path):
+    marker = tmp_path / "executed.txt"
+    f = tmp_path / "_version.py"
+    f.write_text(f'__version__ = "3.2.1"\nopen({str(marker)!r}, "w").write("x")\n')
+    assert cli.load_version(f) == "3.2.1"
+    assert not marker.exists()
+
+
 # ===== gitversion
 
 

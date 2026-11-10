@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import importlib.util
 import json
 import os
 import re
@@ -234,28 +233,22 @@ def cmd_format() -> int:
 
 
 def load_version(path: Path) -> str:
-    """Return the version defined in the given version file.
+    """Read the version verbatim from the source of the given version file.
 
-    Supports _version.py and __init__.py (a __version__ assignment) as well as
-    pyproject.toml (a static version in the [project] table).
+    The module is not imported/executed; the literal assignment is read from
+    the text. Supports _version.py and __init__.py (a __version__ = "..."
+    assignment) as well as pyproject.toml (a static version in [project]).
     """
+    text = path.read_text(encoding="utf-8")
     if path.name == "pyproject.toml":
-        span = _project_version_span(path.read_text(encoding="utf-8"))
+        span = _project_version_span(text)
         if span:
             return span[2]
         sys.exit(f"error: could not determine version from [project] in {path}")
-    try:
-        spec = importlib.util.spec_from_file_location("_version", path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return str(mod.__version__)
-    except Exception:
-        # The module-level code failed (e.g. its package is not importable);
-        # fall back to reading the literal __version__ assignment.
-        m = VERSION_LINE_RE.search(path.read_text(encoding="utf-8"))
-        if m:
-            return m.group(3)
-        sys.exit(f"error: could not determine __version__ from {path}")
+    m = VERSION_LINE_RE.search(text)
+    if m:
+        return m.group(3)
+    sys.exit(f"error: no __version__ assignment found in {path}")
 
 
 def cmd_bump(version: str) -> int:
