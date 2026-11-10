@@ -51,7 +51,7 @@ jobs:
             pip install alver
           fi
 
-      - name: Create and push version tag
+      - name: Get version and tag
         run: |
           set -e
           VERSION=$(alver version)
@@ -59,6 +59,10 @@ jobs:
           echo "Detected version $VERSION -> tag $TAG"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Create and push version tag
+        run: |
+          set -e
           # When triggered by a tag push, the pushed tag must match the version.
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             PUSHED_TAG="${GITHUB_REF#refs/tags/}"
@@ -131,6 +135,15 @@ jobs:
           else
             pip install alver
           fi
+
+      - name: Get version and tag
+        run: |
+          set -e
+          VERSION=$(alver version)
+          TAG="v${VERSION#v}"
+          echo "Detected version $VERSION -> tag $TAG"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
