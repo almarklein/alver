@@ -1,16 +1,15 @@
 # Changelog / release notes
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Possible sections in each release:
 
-* Added: for new features.
-* Changed: for changes in existing functionality.
-* Deprecated: for soon-to-be removed features.
-* Removed: for now removed features.
-* Fixed: for any bug fixes.
-* Security: in case of vulnerabilities.
+## [1.2.4](https://github.com/almarklein/alver/releases/tag/1.2.4) - 10-11-2026
+
+### What's Changed
+* Read version verbatim instead of via an import by @almarklein in https://github.com/almarklein/alver/pull/23
+
+**Full Changelog**: https://github.com/almarklein/alver/compare/v1.2.3...1.2.4
 
 
 ## [1.2.3](https://github.com/almarklein/alver/releases/tag/1.2.3) - 10-11-2026
