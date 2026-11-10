@@ -13,20 +13,10 @@ on:
     branches: [main]
 
 jobs:
-  # Per-project build steps live in build.yml (reusable workflow); copy both
-  # files into a project and only edit build.yml.
-  build:
-    uses: ./.github/workflows/build.yml
 
-  release:
-    needs: build
+  check:
+    name: Check whether a release is allowed
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # push the tag, create the gh release
-      id-token: write # PyPI trusted publishing (OIDC)
-    # Scoped to the "pypi" GitHub environment, matching the environment
-    # name configured for the pending publisher on pypi.org.
-    environment: pypi
     # Run only for: manual dispatch, a vx.y.z tag push, or a merged
     # "release" -> main PR.
     if: >-
@@ -36,7 +26,9 @@ jobs:
        github.event.pull_request.merged == true &&
        github.event.pull_request.base.ref == 'main' &&
        github.event.pull_request.head.ref == 'release')
+
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -44,7 +36,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install alver
         run: |
@@ -104,18 +96,57 @@ jobs:
           echo "Release notes for $TAG:"
           cat release-notes.md
 
+  # Per-project build steps live in build.yml (reusable workflow); copy both
+  # files into a project and only edit build.yml.
+  build:
+    needs: check
+    uses: ./.github/workflows/build.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag, create the gh release
+      id-token: write # PyPI trusted publishing (OIDC)
+    # Scoped to the "pypi" GitHub environment, matching the environment
+    # name configured for the pending publisher on pypi.org.
+    environment: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install alver
+        run: |
+          if [ -f alver/__init__.py ]; then
+            pip install .
+          else
+            pip install alver
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist # artifact uploaded by the build job in build.yml
           path: dist
 
-      - name: Publish to PyPI (trusted publishing)
+      - name: Get release notes from changelog
+        run: |
+          set -e
+          alver notes "$TAG" > release-notes.md
+
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # No token/password: uses OIDC trusted publishing (id-token: write),
         # scoped via the job-level "pypi" environment.
 
-      - name: Create/publish GitHub release
+      - name: Publish to Github
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
