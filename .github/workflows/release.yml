@@ -17,6 +17,8 @@ jobs:
   check:
     name: Check whether a release is allowed
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag
     # Run only for: manual dispatch, a vx.y.z tag push, or a merged
     # "release" -> main PR.
     if: >-
