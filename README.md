@@ -12,7 +12,7 @@ Easy management of versions, releases and changelog.
 This flow is based on the idea that a release deserves the care of a human to at least approve the generated release notes,
 but from then on a release should be as automatic as it can get.
 
-The release workflow on Github Actions triggers when a branch named `release` is merged into `main`,
+The release workflow on Github Actions triggers when a branch named `release` (configurable via the `release-branch` input, e.g. `bump`) is merged into `main`,
 but can also be triggered manually or by pushing a tag `vx.y.z`.
 So if you e.g. forgot to setup the trusted publisher, you can just retry.
 
@@ -30,10 +30,49 @@ Meet the assumptions made by alver:
 
 To setup Github actions:
 
-* Copy [release.yml](.github/workflows/release.yml) into your project.
-* Create a `build.yml` that does the build and published the artifacts to `dist`.
-* At Pypi: setup trusted publishing, using `release.yml` and the `pypi` environment.
+* Create a small workflow in your project with your own build job plus one job that calls the shared release workflow from this repo as a reusable workflow:
+
+  ```yaml
+  name: Release
+
+  on:
+    workflow_dispatch:
+    push:
+      tags: ["v[0-9]*.[0-9]*.[0-9]*"]
+    pull_request:
+      types: [closed]
+      branches: [main]
+
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        ...
+        - uses: actions/upload-artifact@v4
+          with:
+            name: dist
+            path: dist/
+
+    release:
+      needs: build
+      uses: almarklein/alver/.github/workflows/release-shared.yml@main
+      permissions:
+        contents: write # push the tag, create the gh release
+        id-token: write # PyPI trusted publishing (OIDC)
+      # Optionally override the defaults:
+      # with:
+      #   python-version: "3.12"
+      #   environment: pypi
+      #   dist-artifact: dist
+      #   release-branch: release # e.g. "bump"
+      #   publish-pypi: true
+      #   publish-github: true
+  ```
+
+  The release flow runs entirely in your repo: it reads the version from your code, pushes the `vx.y.z` tag, and creates the GitHub release in your repo. Trigger it the same way as in this repo: manually, by pushing a `vx.y.z` tag, or by merging a release-branch (default `release`) -> `main` PR. (In this repo, [`.github/workflows/release.yml`](.github/workflows/release.yml) is exactly such a wrapper, calling the shared workflow locally.)
+* Adapt the `build` job to your project; it must upload the built files as an artifact named `dist` (or set the `dist-artifact` input to match).
 * At Github: in the settings create an environment called `pypi`.
+* At Pypi: setup trusted publishing (OIDC) for your repository and your release workflow, using the `pypi` environment. (Not publishing to PyPI? Set `publish-pypi: false` and skip this; likewise `publish-github: false` skips the GitHub release.)
 
 
 ## Using the alver CLI tool
