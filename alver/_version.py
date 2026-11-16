@@ -1,4 +1,4 @@
-__version__ = "1.2.4"
+__version__ = "1.3.0"
 version_info = tuple(int(i) for i in __version__.split("."))
 
 # To refine the version with git info, a project's _version.py can do:
