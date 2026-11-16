@@ -7,19 +7,11 @@ on:
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
-  # A PR from the release branch (default "release") is merged into main
-  # (the head-branch check itself lives in release-shared.yml).
+  # A PR is merged into main (the release-shared.yml checks the name of the branch).
   pull_request:
     types: [closed]
     branches: [main]
 
-# Wrapper around the shared reusable workflow, in the same shape as
-# downstream projects use -- they call it remotely instead:
-#   uses: almarklein/alver/.github/workflows/release-shared.yml@v1
-# Each project builds its artifacts in the build job below and uploads them
-# as the "dist" artifact; the shared workflow downloads and publishes them.
-# The permissions on the release job are the ceiling for the GITHUB_TOKEN
-# used inside the called workflow.
 jobs:
 
   build:
@@ -49,8 +41,8 @@ jobs:
     uses: ./.github/workflows/release-shared.yml   # <-- in the alver repo
     # uses: almarklein/alver/.github/workflows/release-shared.yml@main  # <-- in other repos
     permissions:
-      contents: write # push the tag, create the gh release
-      id-token: write # PyPI trusted publishing (OIDC)
+      contents: write # to push the tag and create the gh release
+      id-token: write # for PyPI trusted publishing (OIDC)
     # Showing all options and their default values
     with:
       python-version: "3.14"  # Python version to set up
