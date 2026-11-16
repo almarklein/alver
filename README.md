@@ -27,6 +27,7 @@ Meet the assumptions made by alver:
 
 * Your version is defined in `pyproject.toml`, `__init__.py`, or `_version.py`.
 * You have a CHANGELOG.md with headers marked as `## [v1.0.0] - 09-11-2026`. If no changelog exists, alver will create it. 
+* Commands that talk to GitHub (`bump`, `changelog-from-gh`, `changelog-to-gh`) call the GitHub REST API directly using a `GH_TOKEN` or `GITHUB_TOKEN` environment variable; if neither is set they fall back to the `gh` CLI, so `gh` itself is optional.
 
 To setup Github actions:
 
@@ -85,7 +86,7 @@ positional arguments:
     version             Print the current project version (from _version.py, __init__.py, or pyproject.toml).
     gitversion          Print the detailed project version based on git tags and history (like 'version', but refined), e.g. 1.2.3.post4+gabcdef1.
     format              Format CHANGELOG.md in place, fixes section headers and blank lines.
-    bump                Bump to the given version and add a changelog section with gh-generated release notes, e.g. `alver bump v1.2.3`.
+    bump                Bump to the given version and add a changelog section with GitHub-generated release notes, e.g. `alver bump v1.2.3`.
     notes               Print the release notes for the given version from CHANGELOG.md, e.g. `alver notes v1.2.3`.
     changelog-from-gh   Create/update CHANGELOG.md sections from the GitHub releases of this repo for the given version, e.g. `alver
                         changelog-from-gh v1.2.3` ('*' = all releases).
