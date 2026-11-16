@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -32,14 +33,17 @@ Preamble.
 """
 
 # A fake gh executable: answers the generate-notes and releases endpoints.
+# Emits raw REST API JSON (alver parses it itself; no --jq involved).
 FAKE_GH = """#!/usr/bin/env python3
 import json, sys
 args = sys.argv[1:]
 if any("generate-notes" in a for a in args):
-    print("* gh generated note")
+    print(json.dumps({"body": "* gh generated note"}))
 elif any("/releases" in a for a in args):
-    print(json.dumps({"id": 2, "tag": "v0.2.0", "date": "2026-09-15T10:00:00Z", "body": "* gh release b"}))
-    print(json.dumps({"id": 1, "tag": "v0.1.0", "date": "2026-08-01T10:00:00Z", "body": "* gh release a"}))
+    print(json.dumps([
+        {"id": 2, "tag_name": "v0.2.0", "published_at": "2026-09-15T10:00:00Z", "body": "* gh release b", "draft": False},
+        {"id": 1, "tag_name": "v0.1.0", "published_at": "2026-08-01T10:00:00Z", "body": "* gh release a", "draft": False},
+    ]))
 else:
     sys.exit(1)
 """
@@ -57,8 +61,10 @@ if "PATCH" in args:
     print(json.dumps({"id": 2}))
     sys.exit(0)
 if any("/releases" in a for a in args):
-    print(json.dumps({"id": 2, "tag": "0.2.0", "date": "2026-09-15T10:00:00Z", "body": "* old"}))
-    print(json.dumps({"id": 1, "tag": "v0.1.0", "date": "2026-08-01T10:00:00Z", "body": "* gh release a"}))
+    print(json.dumps([
+        {"id": 2, "tag_name": "0.2.0", "published_at": "2026-09-15T10:00:00Z", "body": "* old", "draft": False},
+        {"id": 1, "tag_name": "v0.1.0", "published_at": "2026-08-01T10:00:00Z", "body": "* gh release a", "draft": False},
+    ]))
     sys.exit(0)
 sys.exit(1)
 """
@@ -127,6 +133,43 @@ def install_fake_gh(tmp_path, monkeypatch):
         return bindir
 
     return _install
+
+
+@pytest.fixture(autouse=True)
+def no_github_token(monkeypatch):
+    """Keep tests off the real API: clear token env vars so the gh fallback is used."""
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+
+@pytest.fixture
+def no_gh(monkeypatch):
+    """Make the gh executable unavailable."""
+    real_run = subprocess.run
+
+    def _no_gh(cmd, *args, **kwargs):
+        if cmd[0] == "gh":
+            raise FileNotFoundError("gh")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(cli.subprocess, "run", _no_gh)
+
+
+class FakeHttpResponse:
+    """Minimal stand-in for the object returned by urllib.request.urlopen."""
+
+    def __init__(self, status, payload):
+        self.status = status
+        self._data = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
 @pytest.fixture
@@ -678,3 +721,130 @@ def test_load_version_pyproject(tmp_path):
     f = tmp_path / "pyproject.toml"
     f.write_text(PYPROJECT)
     assert cli.load_version(f) == "0.1.0"
+
+
+# ===== GitHub REST API via GH_TOKEN / GITHUB_TOKEN (no gh executable needed)
+
+
+def test_bump_uses_rest_api_with_token_and_no_gh(tmp_path, monkeypatch, no_gh, capsys):
+    monkeypatch.setenv("GH_TOKEN", "fake-token")
+    requests = []
+
+    def fake_urlopen(req, timeout=None):
+        requests.append(req)
+        assert (
+            req.full_url
+            == "https://api.github.com/repos/acme/widgets/releases/generate-notes"
+        )
+        assert req.get_method() == "POST"
+        assert req.headers["Authorization"] == "Bearer fake-token"
+        fields = json.loads(req.data.decode("utf-8"))
+        assert fields["tag_name"] == "v0.2.0"
+        return FakeHttpResponse(200, {"body": "* api generated note"})
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", fake_urlopen)
+    repo = make_repo(tmp_path, changelog=CHANGELOG)
+    monkeypatch.chdir(repo)
+    assert cli.main(["bump", "v0.2.0"]) == 0
+    assert "* api generated note" in (repo / "CHANGELOG.md").read_text()
+    # The tag attempt succeeded, so no target_commitish retry happened.
+    assert len(requests) == 1
+
+
+def test_get_release_notes_retries_with_commitish(tmp_path, monkeypatch, no_gh):
+    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.chdir(make_repo(tmp_path, changelog=CHANGELOG))
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        fields = json.loads(req.data.decode("utf-8"))
+        calls.append(fields)
+        if "target_commitish" in fields:
+            return FakeHttpResponse(200, {"body": "* notes from head"})
+        return FakeHttpResponse(404, {"message": "Not Found"})
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", fake_urlopen)
+    notes, source = cli.get_release_notes("acme", "widgets", "v9.9.9", Path.cwd())
+    assert notes == "* notes from head"
+    assert source == "GitHub API"
+    assert len(calls) == 2 and "target_commitish" in calls[1]
+
+
+def test_changelog_from_gh_uses_rest_api_with_token(repo, monkeypatch, no_gh):
+    monkeypatch.setenv("GH_TOKEN", "fake-token")
+
+    def fake_urlopen(req, timeout=None):
+        assert req.get_method() == "GET"
+        assert "repos/acme/widgets/releases" in req.full_url
+        assert req.headers["Authorization"] == "Bearer fake-token"
+        return FakeHttpResponse(
+            200,
+            [
+                {
+                    "id": 2,
+                    "tag_name": "v0.2.0",
+                    "published_at": "2026-09-15T10:00:00Z",
+                    "body": "* api release b",
+                    "draft": False,
+                },
+                {
+                    "id": 1,
+                    "tag_name": "v0.1.0",
+                    "published_at": "2026-08-01T10:00:00Z",
+                    "body": "* api release a",
+                    "draft": False,
+                },
+                {
+                    "id": 3,
+                    "tag_name": "v0.3.0",
+                    "published_at": None,
+                    "body": "secret draft",
+                    "draft": True,
+                },
+            ],
+        )
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", fake_urlopen)
+    assert cli.main(["changelog-from-gh", "*"]) == 0
+    changelog = (repo / "CHANGELOG.md").read_text()
+    assert "* api release b" in changelog
+    assert "* api release a" in changelog
+    assert "secret draft" not in changelog  # drafts are filtered out
+
+
+def test_changelog_to_gh_uses_rest_api_patch_with_token(
+    tmp_path, monkeypatch, no_gh, capsys
+):
+    monkeypatch.setenv("GH_TOKEN", "fake-token")
+    patches = []
+
+    def fake_urlopen(req, timeout=None):
+        if req.get_method() == "GET":
+            return FakeHttpResponse(
+                200,
+                [
+                    {
+                        "id": 2,
+                        "tag_name": "0.2.0",
+                        "published_at": "2026-09-15T10:00:00Z",
+                        "body": "* old",
+                        "draft": False,
+                    }
+                ],
+            )
+        assert req.get_method() == "PATCH"
+        patches.append((req.full_url, json.loads(req.data.decode("utf-8"))))
+        return FakeHttpResponse(200, {"id": 2})
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", fake_urlopen)
+    changelog = "# Changelog\n\n## [v0.2.0] - 01-09-2026\n\n* two notes\n"
+    repo = make_repo(tmp_path, changelog=changelog)
+    monkeypatch.chdir(repo)
+    assert cli.main(["changelog-to-gh", "v0.2.0"]) == 0
+    assert len(patches) == 1
+    assert (
+        patches[0][0]
+        == "https://api.github.com/repos/acme/widgets/releases/tags/v0.2.0"
+    )
+    assert patches[0][1] == {"body": "* two notes"}
+    assert "Updated release v0.2.0" in capsys.readouterr().out
