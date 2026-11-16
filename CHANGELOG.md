@@ -4,6 +4,15 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.0](https://github.com/almarklein/alver/releases/tag/1.3.0) - 16-11-2026
+
+### What's Changed
+* Allow other repos to re-use the job by @almarklein in https://github.com/almarklein/alver/pull/24
+* Dont rely on gh cli tool by @almarklein in https://github.com/almarklein/alver/pull/25
+
+**Full Changelog**: https://github.com/almarklein/alver/compare/v1.2.4...1.3.0
+
+
 ## [1.2.4](https://github.com/almarklein/alver/releases/tag/1.2.4) - 10-11-2026
 
 ### What's Changed
