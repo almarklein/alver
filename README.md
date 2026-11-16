@@ -55,7 +55,7 @@ To setup Github actions:
 
     release:
       needs: build
-      uses: almarklein/alver/.github/workflows/release-shared.yml@v1 # pin to a release tag
+      uses: almarklein/alver/.github/workflows/release-shared.yml@main
       permissions:
         contents: write # push the tag, create the gh release
         id-token: write # PyPI trusted publishing (OIDC)
