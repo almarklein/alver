@@ -31,7 +31,7 @@ Meet the assumptions made by alver:
 
 To setup Github actions:
 
-* Create a small workflow in your project with your own build job plus one job that calls the shared release workflow from this repo as a reusable workflow:
+* Create a small workflow in your project with your own build job, one job that calls the shared release workflow from this repo as a reusable workflow, and one publish job:
 
   ```yaml
   name: Release
@@ -59,21 +59,34 @@ To setup Github actions:
       uses: almarklein/alver/.github/workflows/release-shared.yml@main
       permissions:
         contents: write # push the tag, create the gh release
-        id-token: write # PyPI trusted publishing (OIDC)
       # Optionally override the defaults:
       # with:
       #   python-version: "3.12"
-      #   environment: pypi
       #   dist-artifact: dist
       #   release-branch: release # e.g. "bump"
-      #   publish-pypi: true
-      #   publish-github: true
+
+    # PyPI trusted publishing (OIDC) does not support reusable workflows, so
+    # this job must live in *your* workflow file (the OIDC token then names
+    # this file, which is what the PyPI publisher is configured with).
+    publish-pypi:
+      needs: release
+      runs-on: ubuntu-latest
+      environment: pypi
+      permissions:
+        id-token: write # PyPI trusted publishing (OIDC)
+        contents: read
+      steps:
+        - uses: actions/download-artifact@v4
+          with:
+            name: dist
+            path: dist
+        - uses: pypa/gh-action-pypi-publish@release/v1
   ```
 
   The release flow runs entirely in your repo: it reads the version from your code, pushes the `vx.y.z` tag, and creates the GitHub release in your repo. Trigger it the same way as in this repo: manually, by pushing a `vx.y.z` tag, or by merging a release-branch (default `release`) -> `main` PR. (In this repo, [`.github/workflows/release.yml`](.github/workflows/release.yml) is exactly such a wrapper, calling the shared workflow locally.)
 * Adapt the `build` job to your project; it must upload the built files as an artifact named `dist` (or set the `dist-artifact` input to match).
 * At Github: in the settings create an environment called `pypi`.
-* At Pypi: setup trusted publishing (OIDC) for your repository and your release workflow, using the `pypi` environment. (Not publishing to PyPI? Set `publish-pypi: false` and skip this; likewise `publish-github: false` skips the GitHub release.)
+* At Pypi: setup trusted publishing (OIDC) for your repository, your release workflow file (`release.yml`), and the `pypi` environment. (Not publishing to PyPI? Remove the `publish-pypi` job)
 
 
 ## Using the alver CLI tool
