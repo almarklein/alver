@@ -11,6 +11,31 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  # Reusable workflow: other projects can run this release flow from their
+  # own repository with a small caller workflow:
+  #
+  #   jobs:
+  #     release:
+  #       uses: almarklein/alver/.github/workflows/release.yml@main
+  #
+  # Everything runs in the *caller's* repo: the checkout, the git tag, the
+  # gh release and the OIDC token are all the caller's. The local build.yml
+  # reference below resolves in the caller's repo too, so each project
+  # provides its own .github/workflows/build.yml.
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version to set up
+        type: string
+        default: "3.14"
+      environment:
+        description: GitHub environment used for publishing (must have the PyPI trusted publisher configured)
+        type: string
+        default: "pypi"
+      dist-artifact:
+        description: Name of the artifact that the caller's build.yml uploads, downloaded before publishing
+        type: string
+        default: "dist"
 
 jobs:
 
@@ -38,13 +63,16 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          # The input default applies for workflow_call; the fallback keeps
+          # the push/pull_request/workflow_dispatch triggers working.
+          python-version: "${{ inputs.python-version || '3.14' }}"
 
       - name: Install alver
         run: |
-          # This workflow is copied verbatim into other projects. When running
-          # in the alver repo itself (or a fork), use that (this is a test by itself);
-          # otherwise install alver from PyPI.
+          # When running in the alver repo itself (or a fork), install from
+          # the local checkout (this doubles as a test of the current code);
+          # otherwise (e.g. when called as a reusable workflow from another
+          # project) install alver from PyPI.
           if [ -f alver/__init__.py ]; then
             pip install .
           else
@@ -102,8 +130,10 @@ jobs:
           echo "Release notes for $TAG:"
           cat release-notes.md
 
-  # Per-project build steps live in build.yml (reusable workflow); copy both
-  # files into a project and only edit build.yml.
+  # Per-project build steps live in build.yml (reusable workflow). When this
+  # workflow is called from another project (workflow_call above), this local
+  # reference resolves in the *calling* repo, so each project provides its own
+  # .github/workflows/build.yml; copy build.yml from this repo and edit it.
   build:
     needs: check
     uses: ./.github/workflows/build.yml
@@ -114,9 +144,9 @@ jobs:
     permissions:
       contents: write # push the tag, create the gh release
       id-token: write # PyPI trusted publishing (OIDC)
-    # Scoped to the "pypi" GitHub environment, matching the environment
-    # name configured for the pending publisher on pypi.org.
-    environment: pypi
+    # Scoped to the GitHub environment (default "pypi"), matching the
+    # environment name configured for the pending publisher on pypi.org.
+    environment: ${{ inputs.environment || 'pypi' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -126,7 +156,7 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "${{ inputs.python-version || '3.14' }}"
 
       - name: Install alver
         run: |
@@ -148,7 +178,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: dist # artifact uploaded by the build job in build.yml
+          name: ${{ inputs.dist-artifact || 'dist' }} # artifact uploaded by the build job in build.yml
           path: dist
 
       - name: Get release notes from changelog
