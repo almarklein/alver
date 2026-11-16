@@ -46,7 +46,8 @@ jobs:
 
   release:
     needs: build
-    uses: ./.github/workflows/release-shared.yml
+    uses: ./.github/workflows/release-shared.yml   # <-- in the alver repo
+    # uses: almarklein/alver/.github/workflows/release-shared.yml@main  # <-- in other repos
     permissions:
       contents: write # push the tag, create the gh release
       id-token: write # PyPI trusted publishing (OIDC)
