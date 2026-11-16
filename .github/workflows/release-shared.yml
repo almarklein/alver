@@ -12,14 +12,27 @@ name: Release (shared)
 #       uses: almarklein/alver/.github/workflows/release-shared.yml@v1
 #       permissions:
 #         contents: write
+#     publish-pypi:
+#       needs: release
+#       environment: pypi
+#       permissions:
 #         id-token: write
+#       steps:
+#         - uses: actions/download-artifact@v4
+#           with: { name: dist, path: dist }
+#         - uses: pypa/gh-action-pypi-publish@release/v1
 #
-# Everything runs in the *caller's* repo: the checkout, the git tag, the
-# gh release and the OIDC token are all the caller's. The caller's own
-# workflow is expected to have a build job (wired before this one with
-# needs:) that uploads the built files as an artifact (name given by the
-# dist-artifact input, default "dist"); the single job below downloads that
-# artifact before publishing.
+# Everything runs in the *caller's* repo: the checkout, the git tag and the
+# gh release are all the caller's. The caller's own workflow is expected to
+# have a build job (wired before this one with needs:) that uploads the built
+# files as an artifact (name given by the dist-artifact input, default
+# "dist"); the single job below downloads that artifact before publishing.
+# The PyPI publish is deliberately NOT part of this reusable workflow: PyPI's
+# OIDC trusted publishing matches the token's workflow claims, which for a job
+# in a reusable workflow name this file -- not supported by PyPI. The caller's
+# workflow therefore declares its own publish-pypi job (see above) using
+# pypa/gh-action-pypi-publish directly, so the claims name the caller's own
+# workflow file.
 on:
   workflow_call:
     inputs:
@@ -27,10 +40,6 @@ on:
         description: Python version to set up
         type: string
         default: "3.14"
-      environment:
-        description: GitHub environment used for publishing (must have the PyPI trusted publisher configured)
-        type: string
-        default: "pypi"
       dist-artifact:
         description: Name of the build artifact to download before publishing (uploaded by the caller's own build job)
         type: string
@@ -39,29 +48,16 @@ on:
         description: Branch name whose merged PRs into main trigger a release
         type: string
         default: "release"
-      publish-pypi:
-        description: Publish the release to PyPI (OIDC trusted publishing via the environment)
-        type: boolean
-        default: true
-      publish-github:
-        description: Create/update the GitHub release and upload the build artifacts
-        type: boolean
-        default: true
 
 jobs:
 
   # Everything in a single job: check that a release is allowed, create and
-  # push the tag, then download the build artifact and publish the release.
+  # push the tag, then download the build artifact and create the gh release.
   release:
     name: Check, tag and publish
     runs-on: ubuntu-latest
     permissions:
       contents: write # push the tag, create the gh release
-      id-token: write # PyPI trusted publishing (OIDC)
-    # Scoped to the GitHub environment given by the "environment" input
-    # (default "pypi"), matching the name configured for the pending
-    # publisher on pypi.org.
-    environment: ${{ inputs.environment }}
     # Run only for: manual dispatch, a vx.y.z tag push, or a merged PR from
     # the release-branch into main.
     if: >-
@@ -152,14 +148,7 @@ jobs:
           name: ${{ inputs.dist-artifact }} # artifact uploaded by the caller's own build job
           path: dist
 
-      - name: Publish to PyPI
-        if: ${{ inputs.publish-pypi }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        # No token/password: uses OIDC trusted publishing (id-token: write),
-        # scoped via the job-level environment.
-
       - name: Publish to Github
-        if: ${{ inputs.publish-github }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
