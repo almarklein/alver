@@ -199,7 +199,7 @@ def cmd_changelog_from_gh(version: str) -> int:
     new_text = changelog.changelog_from_releases(
         changelog_file.read_text(encoding="utf-8"), releases, repo_url=repo_url
     )
-    changelog_file.write_text(new_text, encoding="utf-8")
+    write_repo_file(changelog_file, new_text)
     print(
         f"Updated {changelog_file.relative_to(repo_dir)} from {len(releases)} "
         f"gh releases ({owner}/{repo})"
@@ -229,7 +229,7 @@ def cmd_format() -> int:
     # No repo_url: format normalizes spacing/headers but does not create new
     # release links; existing links are left intact.
     new_text = changelog.format_changelog(text)
-    changelog_file.write_text(new_text, encoding="utf-8")
+    write_repo_file(changelog_file, new_text)
     print(f"Formatted {changelog_file.relative_to(repo_dir)}")
     return 0
 
@@ -275,7 +275,7 @@ def cmd_bump(version: str) -> int:
         release_notes,
         repo_url=repo_url,
     )
-    changelog_file.write_text(new_text, encoding="utf-8")
+    write_repo_file(changelog_file, new_text)
 
     print(
         f"Bumped {version_file.relative_to(repo_dir)}: {old_version} -> {plain_version}"
@@ -347,13 +347,55 @@ def get_owner_repo(repo_dir: Path) -> tuple[str, str]:
     )
 
 
+# Reference files used to detect the repo's line-ending style (the files alver
+# writes itself are deliberately not used: they may carry mixed endings).
+NEWLINE_REFERENCE_FILES = ("README.md", "pyproject.toml", "LICENSE")
+
+
+def detect_newline() -> str:
+    """The dominant line ending (LF or CRLF) of the repo's reference files.
+
+    Checks README.md, pyproject.toml and LICENSE in the repo root; the first
+    one that exists and contains newlines decides (majority wins, ties go to
+    the next candidate). Defaults to LF.
+    """
+    try:
+        repo_dir = get_repo_dir()
+    except SystemExit:
+        return "\n"  # not inside a git repo
+    for name in NEWLINE_REFERENCE_FILES:
+        p = repo_dir / name
+        try:
+            data = p.read_bytes()
+        except OSError:
+            continue
+        crlf = data.count(b"\r\n")
+        lf = data.count(b"\n") - crlf
+        if crlf > lf:
+            return "\r\n"
+        if lf:
+            return "\n"
+    return "\n"
+
+
+def write_repo_file(path: Path, text: str) -> None:
+    """Write a text file using the repo's dominant newline style.
+
+    This keeps git diffs clean both for repos checked out as-is (LF,
+    core.autocrlf=false) and for repos with newline translation enabled
+    (CRLF working files on Windows). The in-memory text is always LF;
+    newline= only controls the on-disk encoding.
+    """
+    path.write_text(text, encoding="utf-8", newline=detect_newline())
+
+
 def get_changelog_file(repo_dir: Path, create: bool = False) -> Path:
     """Return the path to CHANGELOG.md, optionally creating a default one."""
     path = repo_dir / "CHANGELOG.md"
     if not path.is_file():
         if not create:
             sys.exit(f"error: no CHANGELOG.md found at {path}")
-        path.write_text(changelog.DEFAULT_CHANGELOG, encoding="utf-8")
+        write_repo_file(path, changelog.DEFAULT_CHANGELOG)
         print(f"Created {path.relative_to(repo_dir)}")
     return path
 
@@ -425,7 +467,7 @@ def set_version_in_file(path: Path, version: str) -> str:
         if not span:
             sys.exit(f"error: no version assignment found in [project] of {path}")
         start, end, old = span
-        path.write_text(text[:start] + version + text[end:], encoding="utf-8")
+        write_repo_file(path, text[:start] + version + text[end:])
         return old
     m = VERSION_LINE_RE.search(text)
     if not m:
@@ -439,7 +481,7 @@ def set_version_in_file(path: Path, version: str) -> str:
         + m.group(2)
         + text[m.end() :]
     )
-    path.write_text(new_text, encoding="utf-8")
+    write_repo_file(path, new_text)
     return old
 
 

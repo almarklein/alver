@@ -96,8 +96,16 @@ def sort_sections(sections: list[Section]) -> list[Section]:
     return head + vers + rest
 
 
+def _to_lf(text: str) -> str:
+    """Normalize line endings to LF. gh release bodies created via the web UI
+    contain CRLF; if those leak into the file, the next ``read_text`` (which
+    translates CRLF -> LF) makes every body line show up as changed."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def parse_changelog(text: str) -> tuple[str, list[Section]]:
     """Split changelog text into the preamble and a list of sections."""
+    text = _to_lf(text)
     matches = list(HEADER_RE.finditer(text))
     preamble = text[: matches[0].start()] if matches else text
     sections = []
@@ -116,10 +124,11 @@ def parse_changelog(text: str) -> tuple[str, list[Section]]:
 
 
 def _normalize_body(body: str) -> str:
-    """Normalize a section body: at most one blank line (two successive
-    newlines) between lines, and sub-headers written as "## " are rewritten
-    as "### ". Lines starting with a single "#" are left alone."""
-    text = re.sub(r"\n{3,}", "\n\n", body.strip("\n"))
+    """Normalize a section body: LF line endings, at most one blank line (two
+    successive newlines) between lines, and sub-headers written as "## " are
+    rewritten as "### ". Lines starting with a single "#" are left alone."""
+    text = _to_lf(body)
+    text = re.sub(r"\n{3,}", "\n\n", text.strip("\n"))
     return SUBHEADER_RE.sub(r"### \1", text)
 
 
