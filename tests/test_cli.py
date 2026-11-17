@@ -723,6 +723,76 @@ def test_load_version_pyproject(tmp_path):
     assert cli.load_version(f) == "0.1.0"
 
 
+def _spy_write_text(monkeypatch):
+    """Record (filename, newline kwarg) of every Path.write_text call."""
+    written = []
+    real_write_text = Path.write_text
+
+    def spy(self, data, *args, **kwargs):
+        written.append((self.name, kwargs.get("newline", "<default>")))
+        return real_write_text(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", spy)
+    return written
+
+
+def test_files_written_with_lf_when_repo_is_lf(tmp_path, monkeypatch, fake_gh):
+    # Repos checked out as-is (core.autocrlf=false) have LF files; alver must
+    # write LF so git doesn't show every line as changed.
+    written = _spy_write_text(monkeypatch)
+    repo = make_repo(tmp_path, changelog=CHANGELOG)
+    written.clear()  # only record writes made by alver itself
+    monkeypatch.chdir(repo)
+    assert cli.main(["bump", "v0.2.0"]) == 0
+    assert written, "expected files to be written"
+    for name, nl in written:
+        assert nl == "\n", f"{name} was written with newline={nl!r}, expected '\\n'"
+    assert b"\r" not in (repo / "CHANGELOG.md").read_bytes()
+
+
+def test_files_written_with_crlf_when_repo_is_crlf(tmp_path, monkeypatch, fake_gh):
+    # Repos with git newline translation (autocrlf=true on Windows) have CRLF
+    # working files; alver must write CRLF to match, or every line shows as
+    # changed in git diff. Detection reads reference files (README.md), not
+    # the files alver writes.
+    written = _spy_write_text(monkeypatch)
+    repo = make_repo(tmp_path, changelog=CHANGELOG)
+    (repo / "README.md").write_bytes(b"# widgets\r\n\r\nSome text.\r\n")
+    written.clear()
+    monkeypatch.chdir(repo)
+    assert cli.main(["bump", "v0.2.0"]) == 0
+    assert written, "expected files to be written"
+    for name, nl in written:
+        assert nl == "\r\n", (
+            f"{name} was written with newline={nl!r}, expected '\\r\\n'"
+        )
+    # the written files are consistently CRLF: no lone LF bytes
+    for f in [repo / "CHANGELOG.md", repo / "pkg/_version.py"]:
+        data = f.read_bytes()
+        assert data.count(b"\n") == data.count(b"\r\n"), (
+            f"{f.name} has mixed line endings"
+        )
+
+
+def test_detect_newline(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    # no reference files -> LF default
+    assert cli.detect_newline() == "\n"
+    # README.md decides
+    (repo / "README.md").write_bytes(b"# hi\n\ntext\n")
+    assert cli.detect_newline() == "\n"
+    (repo / "README.md").write_bytes(b"# hi\r\n\r\ntext\r\n")
+    assert cli.detect_newline() == "\r\n"
+    # falls back to pyproject.toml when README.md is absent
+    (repo / "README.md").unlink()
+    (repo / "pyproject.toml").write_bytes(b'[project]\r\nname = "x"\r\n')
+    assert cli.detect_newline() == "\r\n"
+    # majority wins within a file
+    (repo / "pyproject.toml").write_bytes(b"a\r\nb\nc\n")
+    assert cli.detect_newline() == "\n"
+
+
 # ===== GitHub REST API via GH_TOKEN / GITHUB_TOKEN (no gh executable needed)
 
 

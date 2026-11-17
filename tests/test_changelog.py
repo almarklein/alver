@@ -243,6 +243,54 @@ def test_changelog_from_releases_picks_larger_version_text(section_name, tag, ex
     assert f"## [{expected}]" in out
 
 
+# ===== line-ending normalization
+
+
+def test_parse_normalizes_crlf():
+    preamble, sections = parse_changelog(SAMPLE.replace("\n", "\r\n"))
+    assert "\r" not in preamble
+    assert all("\r" not in s.body for s in sections)
+    # rendering normalized input reproduces the canonical LF text
+    assert render_changelog(preamble, sections) == SAMPLE
+
+
+def test_crlf_release_bodies_are_normalized_to_lf():
+    # gh release bodies created via the web UI contain \r\n; they must not
+    # leak into the changelog file.
+    releases = [
+        {"tag": "v0.2.0", "date": "2026-09-15T10:00:00Z", "body": "* a\r\n\r\n* b\r\n"},
+        {"tag": "v0.1.0", "date": "2026-08-01T10:00:00Z", "body": "* one\r\n"},
+    ]
+    out = changelog_from_releases(SAMPLE, releases, repo_url=REPO_URL)
+    assert "\r" not in out
+    assert "* a\n\n* b" in out
+
+
+def test_bump_after_from_gh_with_crlf_bodies_changes_only_the_new_section(tmp_path):
+    # Regression test: with CRLF release bodies, from-gh used to write a
+    # mixed-LF/CRLF file; the next command (bump) then read it with
+    # universal-newline translation and rewrote every body line, so git
+    # showed nearly all lines as changed.
+    releases = [
+        {"tag": "v0.2.0", "date": "2026-09-15T10:00:00Z", "body": "* a\r\n* b\r\n"}
+    ]
+    f = tmp_path / "CHANGELOG.md"
+    f.write_text(changelog.DEFAULT_CHANGELOG)
+    f.write_text(changelog_from_releases(f.read_text(), releases, repo_url=REPO_URL))
+    before = f.read_text()
+    assert "\r" not in before  # from-gh must already normalize
+    f.write_text(
+        bump_changelog(
+            f.read_text(), "v0.3.0", "* new\r\n", today=TODAY, repo_url=REPO_URL
+        )
+    )
+    after = f.read_text()
+    assert "\r" not in after
+    # every pre-existing line is still present, unchanged
+    for line in before.splitlines():
+        assert line in after.splitlines()
+
+
 # ===== format / canonical rendering
 
 
